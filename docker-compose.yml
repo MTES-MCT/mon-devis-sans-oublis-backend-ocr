@@ -7,3 +7,5 @@ services:
       - "80:80"
     volumes:
       - ./:/app
+    environment:
+      - API_KEY=development
