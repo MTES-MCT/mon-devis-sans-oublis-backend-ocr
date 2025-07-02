@@ -1,3 +1,9 @@
-Flask~=3.1
-gunicorn~=23.0
-surya-ocr~=0.13
+fastapi
+uvicorn
+python-multipart
+transformers
+torch
+Pillow
+PyPDF2
+PyMuPDF
+accelerate
