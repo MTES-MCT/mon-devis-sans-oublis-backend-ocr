@@ -4,6 +4,9 @@ FROM python:3.9-slim
 # Set the working directory in the container
 WORKDIR /app
 
+# Set the Hugging Face home directory to a persistent location
+ENV HF_HOME=/root/.cache/huggingface
+
 # Copy the requirements file into the container at /app
 COPY ./requirements.txt /app/requirements.txt
 
@@ -13,7 +16,7 @@ RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt --extra-index-
 # Copy the rest of the application's code into the container at /app
 COPY . /app
 
-# Download models during the build process
+# Run the download script to ensure models are cached on first run
 RUN python download_models.py
 
 # Run uvicorn when the container launches
