@@ -8,7 +8,7 @@ WORKDIR /app
 COPY ./requirements.txt /app/requirements.txt
 
 # Install any needed packages specified in requirements.txt
-RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt
+RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt --extra-index-url https://download.pytorch.org/whl/cu121
 
 # Copy the rest of the application's code into the container at /app
 COPY . /app
