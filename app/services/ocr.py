@@ -118,7 +118,17 @@ class OCRFactory:
                 and ocr_results
                 and "generated_text" in ocr_results[0]
             ):
-                return ocr_results[0]["generated_text"]
+                generated_content = ocr_results[0]["generated_text"]
+                if isinstance(generated_content, str):
+                    if model_name == "olmocr":
+                        try:
+                            json_data = json.loads(generated_content)
+                            if "natural_text" in json_data:
+                                return json_data["natural_text"]
+                        except (json.JSONDecodeError, KeyError, TypeError):
+                            pass
+                    return generated_content
+                return str(generated_content) # Fallback to string conversion
             else:
                 return "Error: Could not parse OCR model output."
 
