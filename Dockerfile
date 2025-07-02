@@ -11,9 +11,13 @@ COPY ./requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt --extra-index-url https://download.pytorch.org/whl/cu121
 
 # First copy only the files needed for downloading models
+COPY app/services/ocr/base.py /app/app/services/ocr/base.py
+COPY app/services/ocr/nanonets.py /app/app/services/ocr/nanonets.py
+COPY app/services/ocr/olmocr.py /app/app/services/ocr/olmocr.py
+COPY app/services/ocr/__init__.py /app/app/services/ocr/__init__.py
+
 COPY app/__init__.py /app/app/__init__.py
 COPY app/services/__init__.py /app/app/services/__init__.py
-COPY app/services/ocr.py /app/app/services/ocr.py
 COPY download_models.py /app/download_models.py
 
 # Run the download script to populate the cache
