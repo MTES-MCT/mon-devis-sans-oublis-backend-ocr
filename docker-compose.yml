@@ -7,6 +7,7 @@ services:
       - "8000:80"
     volumes:
       - .:/app
+      - huggingface_cache:/root/.cache/huggingface
     deploy:
       resources:
         reservations:
@@ -14,3 +15,6 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+
+volumes:
+  huggingface_cache:
