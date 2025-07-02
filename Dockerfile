@@ -13,5 +13,8 @@ RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt --extra-index-
 # Copy the rest of the application's code into the container at /app
 COPY . /app
 
+# Download models during the build process
+RUN python download_models.py
+
 # Run uvicorn when the container launches
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "80"]
