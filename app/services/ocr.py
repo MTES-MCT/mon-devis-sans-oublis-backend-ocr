@@ -113,24 +113,42 @@ class OCRFactory:
             max_tokens = 8096
             ocr_results = selected_pipe(messages, max_new_tokens=max_tokens)
             
-            if (
-                isinstance(ocr_results, list)
-                and ocr_results
-                and "generated_text" in ocr_results[0]
-            ):
-                generated_content = ocr_results[0]["generated_text"]
-                if isinstance(generated_content, str):
-                    if model_name == "olmocr":
+            if not isinstance(ocr_results, list) or not ocr_results:
+                return "Error: OCR model did not return expected output."
+
+            generated_content = ocr_results[0].get("generated_text")
+            if not generated_content:
+                 return "Error: Could not find 'generated_text' in the model output."
+            
+            # The output of the pipeline is a list of conversations.
+            # We want the last message from the assistant.
+            if isinstance(generated_content, list):
+                assistant_messages = [
+                    message["content"]
+                    for message in generated_content
+                    if message.get("role") == "assistant"
+                ]
+                if assistant_messages:
+                    last_message = assistant_messages[-1]
+                    if model_name == "olmocr" and isinstance(last_message, str):
                         try:
-                            json_data = json.loads(generated_content)
-                            if "natural_text" in json_data:
-                                return json_data["natural_text"]
-                        except (json.JSONDecodeError, KeyError, TypeError):
-                            pass
-                    return generated_content
-                return str(generated_content) # Fallback to string conversion
-            else:
-                return "Error: Could not parse OCR model output."
+                            json_data = json.loads(last_message)
+                            return json_data.get("natural_text", last_message)
+                        except json.JSONDecodeError:
+                            return last_message # Return as is if not valid JSON
+                    return last_message
+
+            # Fallback for simple string output
+            if isinstance(generated_content, str):
+                 if model_name == "olmocr":
+                    try:
+                        json_data = json.loads(generated_content)
+                        return json_data.get("natural_text", generated_content)
+                    except json.JSONDecodeError:
+                         return generated_content
+                 return generated_content
+
+            return "Error: Could not parse assistant's response from model output."
 
         except Exception as e:
             print(f"Error during Hugging Face OCR processing: {e}")
