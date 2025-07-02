@@ -5,6 +5,8 @@ services:
     build: .
     env_file:
       - .env
+    environment:
+      - HF_HOME=/root/.cache/huggingface
     ports:
       - "8000:80"
     volumes:
