@@ -1,36 +1,73 @@
-from fastapi import APIRouter, File, UploadFile, HTTPException
-from app.services.ocr import ocr_factory
+from fastapi import APIRouter, File, UploadFile, Depends, HTTPException, status
+from app.services.ocr import get_service, OCR_SERVICES
 from app.models.ocr import OCRResponse
-import shutil
+from app.services.ocr.base import BaseOCRService
+from typing import List
+from PIL import Image
+import fitz
+import io
 import os
+import shutil
+from fastapi.concurrency import run_in_threadpool
 
 router = APIRouter()
 
-@router.post("/ocr/{model_name}", response_model=OCRResponse)
+def get_ocr_service(service_name: str) -> BaseOCRService:
+    try:
+        return get_service(service_name)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+def file_to_images(file: UploadFile) -> List[Image.Image]:
+    """
+    Converts an uploaded file (PDF or image) into a list of PIL Image objects.
+    """
+    images = []
+    file_extension = os.path.splitext(file.filename)[1].lower()
+    
+    if file_extension == ".pdf":
+        pdf_bytes = file.file.read()
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        for page in doc:
+            pix = page.get_pixmap()
+            img_bytes = pix.tobytes("png")
+            images.append(Image.open(io.BytesIO(img_bytes)))
+        doc.close()
+    elif file_extension in [".png", ".jpg", ".jpeg", ".bmp", ".gif"]:
+        images.append(Image.open(file.file))
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported file type: {file_extension}",
+        )
+    return images
+
+
+@router.post("/ocr/{service_name}", response_model=OCRResponse)
 async def ocr(
-    model_name: str,
+    service_name: str,
     file: UploadFile = File(...),
+    ocr_service: BaseOCRService = Depends(get_ocr_service),
 ):
     """
-    This endpoint receives a file (PDF or image), saves it to a temporary location,
-    processes it using the specified OCR model, and returns the result.
-    
-    Available models: nanonets, olmocr
+    This endpoint receives a file (PDF or image), converts it to images,
+    processes them using the specified OCR model, and returns the result.
     """
-    if model_name not in ["nanonets", "olmocr"]:
-        raise HTTPException(status_code=400, detail="Invalid OCR model specified. Available models: nanonets, olmocr")
+    images = await run_in_threadpool(file_to_images, file)
+    
+    if not images:
+        raise HTTPException(status_code=400, detail="Could not process the uploaded file into images.")
 
-    temp_dir = "temp_storage"
-    os.makedirs(temp_dir, exist_ok=True)
-    temp_file_path = os.path.join(temp_dir, file.filename)
+    results = await run_in_threadpool(ocr_service.process_images, images)
+    
+    # Join the text from all pages/images into a single string
+    full_text = "\n\n--- Page Break ---\n\n".join(results)
+    
+    return OCRResponse(text=full_text)
 
-    try:
-        with open(temp_file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-
-        result_text = await ocr_factory.process_file(temp_file_path, file.filename, model_name)
-        return OCRResponse(text=result_text)
-    finally:
-        # Clean up the temporary file
-        if os.path.exists(temp_file_path):
-            os.remove(temp_file_path)
+@router.get("/services")
+async def list_services():
+    """
+    Returns a list of available OCR services.
+    """
+    return {"services": list(OCR_SERVICES.keys())}
