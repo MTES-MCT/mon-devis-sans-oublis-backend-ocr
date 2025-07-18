@@ -118,8 +118,9 @@ async def ocr(
     if not images:
         raise HTTPException(status_code=400, detail="Could not process the uploaded file into images.")
 
+    print(f"processing {len(images)} images")
     results = await run_in_threadpool(ocr_service.process_images, images)
-    
+    print(f"returning {len(results)} results")
     # Join the text from all pages/images into a single string
     full_text = "\n\n--- Page Break ---\n\n".join(results)
     
