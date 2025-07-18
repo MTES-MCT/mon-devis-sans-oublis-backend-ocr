@@ -11,3 +11,4 @@ fastapi
 uvicorn
 python-multipart
 PyMuPDF
+apng
