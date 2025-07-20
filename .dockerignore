@@ -1,10 +1,56 @@
-**/__pycache__
-**/*.pyc
-**/*.pyo
-**/*.pyd
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
 .Python
-.env
-.git
+env/
+venv/
+ENV/
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+*.log
+*.pdf
+*.png
+*.jpg
+*.jpeg
+documents/
+temp/
+cache/
+
+# Git
+.git/
 .gitignore
+
+# Docker
+Dockerfile
+docker-compose.yml
 .dockerignore
-venv
+
+# Environment
+.env
+.env.*
