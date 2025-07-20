@@ -23,9 +23,12 @@ COPY ./requirements.txt /app/requirements.txt
 # Install any needed packages specified in requirements.txt
 RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt --extra-index-url https://download.pytorch.org/whl/cu121
 
-# Copy and run the test script to verify marker installation
+# Copy and run the test scripts to verify marker installation
 COPY test_marker_import.py /app/test_marker_import.py
+COPY test_marker_service.py /app/test_marker_service.py
 RUN python /app/test_marker_import.py
+# Run the service test to ensure marker works correctly
+RUN python /app/test_marker_service.py
 
 # First copy only the files needed for downloading models
 COPY app/services/ocr/base.py /app/app/services/ocr/base.py
