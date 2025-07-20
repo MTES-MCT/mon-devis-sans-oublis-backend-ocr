@@ -23,12 +23,19 @@ def discover_services():
     package_name = __name__
 
     for _, module_name, _ in pkgutil.iter_modules(package_path):
-        # Import the module
-        module = __import__(f"{package_name}.{module_name}", fromlist=["*"])
-        
-        # Find all classes in the module and register them if they are a service
-        for name, obj in inspect.getmembers(module, inspect.isclass):
-            register_service(obj)
+        try:
+            # Import the module
+            module = __import__(f"{package_name}.{module_name}", fromlist=["*"])
+            
+            # Find all classes in the module and register them if they are a service
+            for name, obj in inspect.getmembers(module, inspect.isclass):
+                register_service(obj)
+        except ImportError as e:
+            # Skip modules that can't be imported (e.g., marker during build phase)
+            print(f"Skipping module {module_name}: {e}")
+        except Exception as e:
+            # Log other errors but continue
+            print(f"Error loading module {module_name}: {e}")
 
 # Discover and register services when the package is imported
 discover_services()
