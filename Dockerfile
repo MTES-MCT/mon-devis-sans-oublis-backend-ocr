@@ -9,6 +9,7 @@ COPY ./requirements.txt /app/requirements.txt
 
 # Install any needed packages specified in requirements.txt
 RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt --extra-index-url https://download.pytorch.org/whl/cu121
+RUN pip install marker-pdf[full]
 
 # First copy only the files needed for downloading models
 COPY app/services/ocr/base.py /app/app/services/ocr/base.py
