@@ -41,9 +41,6 @@ class MarkerOCRService(BaseOCRService):
             text, _, _ = text_from_rendered(rendered)
             return text
         except Exception as e:
-            print(f"Error processing PDF with marker: {e}")
-            import traceback
-            traceback.print_exc()
             return ""
 
     def process_images(self, images: List[Image.Image]) -> List[str]:
@@ -64,7 +61,6 @@ class MarkerOCRService(BaseOCRService):
             image_bytes_list = []
             for i, img in enumerate(images):
                 try:
-                    print(f"Processing image {i}: size={img.size}, mode={img.mode}")
                     # Convert PIL Image to bytes
                     img_byte_arr = io.BytesIO()
                     # Ensure image is in RGB mode for PDF
@@ -74,10 +70,8 @@ class MarkerOCRService(BaseOCRService):
                     img.save(img_byte_arr, format='JPEG', quality=95)
                     img_byte_arr.seek(0)
                     img_bytes = img_byte_arr.getvalue()
-                    print(f"Image {i} converted to {len(img_bytes)} bytes")
                     image_bytes_list.append(img_bytes)
                 except Exception as e:
-                    print(f"Error converting image {i} to bytes: {e}")
                     # Try PNG format as fallback
                     img_byte_arr = io.BytesIO()
                     img.save(img_byte_arr, format='PNG')
@@ -87,23 +81,13 @@ class MarkerOCRService(BaseOCRService):
             if not image_bytes_list:
                 return [""]
             
-            print(f"Converting {len(image_bytes_list)} images to PDF...")
-            
             # Convert all image bytes to a single PDF
-            try:
-                pdf_bytes = img2pdf.convert(image_bytes_list)
-                print(f"PDF created: {len(pdf_bytes)} bytes")
-            except Exception as e:
-                print(f"Error in img2pdf.convert: {e}")
-                print(f"image_bytes_list type: {type(image_bytes_list)}")
-                print(f"First item type: {type(image_bytes_list[0]) if image_bytes_list else 'empty'}")
-                raise
+            pdf_bytes = img2pdf.convert(image_bytes_list)
             
             # Create temporary file for the combined PDF
             with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as pdf_file:
                 pdf_file.write(pdf_bytes)
                 pdf_path = pdf_file.name
-                print(f"PDF saved to: {pdf_path}")
             
             try:
                 # Process the combined PDF with marker
@@ -119,7 +103,4 @@ class MarkerOCRService(BaseOCRService):
         
         except Exception as e:
             # Handle errors during PDF creation
-            print(f"Error in marker process_images: {e}")
-            import traceback
-            traceback.print_exc()
             return [""]

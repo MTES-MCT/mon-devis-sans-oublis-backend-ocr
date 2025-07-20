@@ -13,7 +13,6 @@ def register_service(service_class):
         service_name = getattr(service_class, '_service_name', None)
         if service_name and service_name != "base":
             OCR_SERVICES[service_name] = service_class()
-            print(f"Registered OCR service: {service_name}")
 
 def discover_services():
     """
@@ -32,10 +31,10 @@ def discover_services():
                 register_service(obj)
         except ImportError as e:
             # Skip modules that can't be imported (e.g., marker during build phase)
-            print(f"Skipping module {module_name}: {e}")
+            pass
         except Exception as e:
             # Log other errors but continue
-            print(f"Error loading module {module_name}: {e}")
+            pass
 
 # Discover and register services when the package is imported
 discover_services()
