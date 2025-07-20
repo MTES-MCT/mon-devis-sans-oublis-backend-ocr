@@ -84,9 +84,7 @@ def file_to_images(file: UploadFile) -> List[Image.Image]:
         shutil.copyfileobj(file.file, buffer)
     
     if file_extension == ".pdf":
-        print(f"Processing PDF file: {file.filename}, size: {os.path.getsize(temp_file_path)} bytes")
         images = pdf_pages_to_images(temp_file_path, dpi=150)
-        print(f"Converted PDF to {len(images)} images")
     elif file_extension in [".png", ".jpg", ".jpeg", ".bmp", ".gif"]:
         if is_apng(temp_file_path):
             extracted_frames = extract_apng_frames(temp_file_path)
@@ -105,42 +103,6 @@ def file_to_images(file: UploadFile) -> List[Image.Image]:
     return images
 
 
-@router.post("/test/marker-pdf", response_model=OCRResponse)
-async def test_marker_pdf(
-    file: UploadFile = File(...),
-):
-    """
-    Test endpoint that processes PDFs directly with marker without image conversion.
-    """
-    if not file.filename.lower().endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="This test endpoint only accepts PDF files")
-    
-    # Save uploaded file to temporary location
-    temp_file_path = f"/tmp/test_{file.filename}"
-    try:
-        with open(temp_file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        
-        print(f"Saved PDF to {temp_file_path}, size: {os.path.getsize(temp_file_path)} bytes")
-        
-        # Process directly with marker
-        from app.services.ocr.marker import MarkerOCRService
-        service = MarkerOCRService()
-        text = service.process_pdf_file(temp_file_path)
-        
-        return OCRResponse(text=text)
-        
-    except Exception as e:
-        print(f"Error in test endpoint: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        # Clean up
-        if os.path.exists(temp_file_path):
-            os.remove(temp_file_path)
-
-
 @router.post("/ocr/{service_name}", response_model=OCRResponse)
 async def ocr(
     service_name: str,
@@ -156,53 +118,11 @@ async def ocr(
     if not images:
         raise HTTPException(status_code=400, detail="Could not process the uploaded file into images.")
 
-    print(f"processing {len(images)} images")
     results = await run_in_threadpool(ocr_service.process_images, images)
-    print(f"returning {len(results)} results")
     # Join the text from all pages/images into a single string
     full_text = "\n\n--- Page Break ---\n\n".join(results)
     
     return OCRResponse(text=full_text)
-
-
-@router.post("/ocr/marker-direct", response_model=OCRResponse)
-async def ocr_marker_direct(
-    file: UploadFile = File(...),
-):
-    """
-    Special endpoint for marker that processes PDFs directly without converting to images.
-    This is more efficient for PDF files.
-    """
-    file_extension = os.path.splitext(file.filename)[1].lower()
-    
-    if file_extension != ".pdf":
-        # Fall back to regular processing for non-PDF files
-        ocr_service = get_ocr_service("marker")
-        images = await run_in_threadpool(file_to_images, file)
-        if not images:
-            raise HTTPException(status_code=400, detail="Could not process the uploaded file into images.")
-        results = await run_in_threadpool(ocr_service.process_images, images)
-        full_text = "\n\n--- Page Break ---\n\n".join(results)
-        return OCRResponse(text=full_text)
-    
-    # Direct PDF processing
-    try:
-        from app.services.ocr.marker_optimized import MarkerDirectService
-        service = MarkerDirectService()
-        
-        # Reset file position
-        file.file.seek(0)
-        
-        # Process PDF directly
-        text = await run_in_threadpool(service.process_pdf_upload, file)
-        return OCRResponse(text=text)
-        
-    except Exception as e:
-        print(f"Error in marker-direct endpoint: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
-
 
 @router.get("/services")
 async def list_services():
