@@ -12,3 +12,6 @@ uvicorn
 python-multipart
 PyMuPDF
 apng
+img2pdf
+marker-pdf[full]
+surya-ocr
