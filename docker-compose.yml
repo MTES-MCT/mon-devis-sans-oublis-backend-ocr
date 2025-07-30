@@ -1,11 +1,24 @@
+version: '3.8'
+
 services:
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    ports:
-      - "80:80"
-    volumes:
-      - ./:/app
+    build: .
+    env_file:
+      - .env
     environment:
-      - API_KEY=development
+      - HF_HOME=/root/.cache/huggingface
+    ports:
+      - "8000:80"
+    volumes:
+      - .:/app
+      - huggingface_cache:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  huggingface_cache:

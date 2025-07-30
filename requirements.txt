@@ -1,3 +1,18 @@
-Flask~=3.1
-gunicorn~=23.0
-surya-ocr~=0.13
+torch>=2.0.0
+gradio
+Pillow
+lxml
+transformers
+torchvision
+accelerate
+hf-transfer
+hf-xet
+fastapi
+uvicorn
+python-multipart
+PyMuPDF
+apng
+img2pdf
+# Install marker-pdf with all dependencies
+marker-pdf[full]==1.8.2
+surya-ocr
