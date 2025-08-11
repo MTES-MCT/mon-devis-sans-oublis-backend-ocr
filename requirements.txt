@@ -19,4 +19,4 @@ surya-ocr
 # Dependencies for DotsOCR
 packaging  # Required for flash-attn installation
 qwen-vl-utils
-# flash-attn
+flash-attn

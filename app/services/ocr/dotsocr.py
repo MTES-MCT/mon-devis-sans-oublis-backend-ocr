@@ -16,21 +16,22 @@ from .base import BaseOCRService
 # Import the required utilities from the dots_ocr package
 try:
     from qwen_vl_utils import process_vision_info
-except ImportError:
-    # If qwen_vl_utils is not available, we'll need to handle this
+except Exception:
+    # Be robust: some environments raise non-ImportError exceptions (e.g., flash_attn missing)
     process_vision_info = None
 
 class DotsOCRService(BaseOCRService):
     _service_name = "dotsocr"
 
     def __init__(self):
-        # Import heavy deps lazily to avoid import-time failures during discovery
+        # Import heavy deps lazily to avoid import-time dependency failures
         from transformers import AutoModelForCausalLM, AutoProcessor
         import torch as torch_lib
         self.torch = torch_lib
 
-        # Try to load the model with flash attention for better performance
-        # Fall back to standard attention if flash attention is not available
+        # Prefer SDPA by default to avoid flash_attn requirement; allow opt-in via env
+        prefer_flash = os.environ.get("USE_FLASH_ATTENTION", "0") == "1"
+
         model_kwargs = {
             "torch_dtype": self.torch.bfloat16,
             "device_map": "auto",
@@ -38,22 +39,34 @@ class DotsOCRService(BaseOCRService):
         }
         
         try:
-            # Try with flash attention first
-            self.model = AutoModelForCausalLM.from_pretrained(
-                "rednote-hilab/dots.ocr",
-                attn_implementation="flash_attention_2",
-                cache_dir="/scratch/huggingface_cache",
-                **model_kwargs
-            )
-            print("DotsOCR: Using flash attention for better performance")
+            if prefer_flash:
+                # Try with flash attention first (requires flash_attn)
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    "rednote-hilab/dots.ocr",
+                    attn_implementation="flash_attention_2",
+                    cache_dir="/scratch/huggingface_cache",
+                    **model_kwargs
+                )
+                print("DotsOCR: Using flash attention for better performance")
+            else:
+                # Default path: use SDPA (built-in PyTorch) to avoid extra deps
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    "rednote-hilab/dots.ocr",
+                    attn_implementation="sdpa",
+                    cache_dir="/scratch/huggingface_cache",
+                    **model_kwargs
+                )
+                print("DotsOCR: Using SDPA attention")
         except Exception as e:
-            # Fall back to standard attention
-            print(f"DotsOCR: Flash attention not available ({e}), using standard attention")
+            # Fall back to eager attention as last resort
+            print(f"DotsOCR: Preferred attention not available ({e}), falling back to eager")
             self.model = AutoModelForCausalLM.from_pretrained(
                 "rednote-hilab/dots.ocr",
+                attn_implementation="eager",
                 cache_dir="/scratch/huggingface_cache",
                 **model_kwargs
             )
+
         self.processor = AutoProcessor.from_pretrained(
             "rednote-hilab/dots.ocr",
             cache_dir="/scratch/huggingface_cache",
