@@ -10,8 +10,7 @@ ENV HUGGINGFACE_HUB_CACHE=/scratch/huggingface_cache/hub
 ENV TRANSFORMERS_CACHE=/scratch/huggingface_cache/transformers
 ENV HF_DATASETS_CACHE=/scratch/huggingface_cache/datasets
 
-# Create the cache directory with proper permissions
-RUN mkdir -p /scratch/huggingface_cache && chmod 777 /scratch/huggingface_cache
+# HF caches are configured via ENV; /scratch is a host bind mount provided at runtime via docker-compose
 
 # Install system dependencies for PDF processing and marker-pdf
 RUN apt-get update && apt-get install -y \
