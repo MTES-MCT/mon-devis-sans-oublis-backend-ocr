@@ -19,14 +19,29 @@ class DotsOCRService(BaseOCRService):
     _service_name = "dotsocr"
 
     def __init__(self):
-        # Load the model with flash attention for better performance
-        self.model = AutoModelForCausalLM.from_pretrained(
-            "rednote-hilab/dots.ocr",
-            attn_implementation="flash_attention_2",
-            torch_dtype=torch.bfloat16,
-            device_map="auto",
-            trust_remote_code=True
-        )
+        # Try to load the model with flash attention for better performance
+        # Fall back to standard attention if flash attention is not available
+        model_kwargs = {
+            "torch_dtype": torch.bfloat16,
+            "device_map": "auto",
+            "trust_remote_code": True
+        }
+        
+        try:
+            # Try with flash attention first
+            self.model = AutoModelForCausalLM.from_pretrained(
+                "rednote-hilab/dots.ocr",
+                attn_implementation="flash_attention_2",
+                **model_kwargs
+            )
+            print("DotsOCR: Using flash attention for better performance")
+        except Exception as e:
+            # Fall back to standard attention
+            print(f"DotsOCR: Flash attention not available ({e}), using standard attention")
+            self.model = AutoModelForCausalLM.from_pretrained(
+                "rednote-hilab/dots.ocr",
+                **model_kwargs
+            )
         self.processor = AutoProcessor.from_pretrained(
             "rednote-hilab/dots.ocr",
             trust_remote_code=True

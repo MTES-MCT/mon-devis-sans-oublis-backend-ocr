@@ -17,5 +17,6 @@ img2pdf
 marker-pdf[full]==1.8.2
 surya-ocr
 # Dependencies for DotsOCR
+packaging  # Required for flash-attn installation
 qwen-vl-utils
 flash-attn
