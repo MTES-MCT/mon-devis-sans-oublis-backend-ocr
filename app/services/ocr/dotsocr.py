@@ -2,6 +2,12 @@ import os
 if "LOCAL_RANK" not in os.environ:
     os.environ["LOCAL_RANK"] = "0"
 
+# Ensure HuggingFace uses the /scratch directory for caching
+if "HF_HOME" not in os.environ:
+    os.environ["HF_HOME"] = "/scratch/huggingface_cache"
+if "TRANSFORMERS_CACHE" not in os.environ:
+    os.environ["TRANSFORMERS_CACHE"] = "/scratch/huggingface_cache/transformers"
+
 import torch
 from transformers import AutoModelForCausalLM, AutoProcessor
 from PIL import Image
@@ -32,6 +38,7 @@ class DotsOCRService(BaseOCRService):
             self.model = AutoModelForCausalLM.from_pretrained(
                 "rednote-hilab/dots.ocr",
                 attn_implementation="flash_attention_2",
+                cache_dir="/scratch/huggingface_cache",
                 **model_kwargs
             )
             print("DotsOCR: Using flash attention for better performance")
@@ -40,10 +47,12 @@ class DotsOCRService(BaseOCRService):
             print(f"DotsOCR: Flash attention not available ({e}), using standard attention")
             self.model = AutoModelForCausalLM.from_pretrained(
                 "rednote-hilab/dots.ocr",
+                cache_dir="/scratch/huggingface_cache",
                 **model_kwargs
             )
         self.processor = AutoProcessor.from_pretrained(
             "rednote-hilab/dots.ocr",
+            cache_dir="/scratch/huggingface_cache",
             trust_remote_code=True
         )
         

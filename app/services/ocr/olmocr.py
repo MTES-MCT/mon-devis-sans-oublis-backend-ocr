@@ -1,3 +1,10 @@
+import os
+# Ensure HuggingFace uses the /scratch directory for caching
+if "HF_HOME" not in os.environ:
+    os.environ["HF_HOME"] = "/scratch/huggingface_cache"
+if "TRANSFORMERS_CACHE" not in os.environ:
+    os.environ["TRANSFORMERS_CACHE"] = "/scratch/huggingface_cache/transformers"
+
 import torch
 from transformers import AutoProcessor, Qwen2VLForConditionalGeneration, pipeline
 from PIL import Image
@@ -9,9 +16,15 @@ class OlmOCRService(BaseOCRService):
     _service_name = "olmocr"
 
     def __init__(self):
-        processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct")
+        processor = AutoProcessor.from_pretrained(
+            "Qwen/Qwen2-VL-7B-Instruct",
+            cache_dir="/scratch/huggingface_cache"
+        )
         model = Qwen2VLForConditionalGeneration.from_pretrained(
-            "allenai/olmOCR-7B-0225-preview", torch_dtype=torch.bfloat16, device_map="auto"
+            "allenai/olmOCR-7B-0225-preview",
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+            cache_dir="/scratch/huggingface_cache"
         )
         self.pipeline = pipeline(
             "image-text-to-text", model=model, processor=processor

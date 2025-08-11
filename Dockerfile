@@ -4,6 +4,15 @@ FROM python:3.11-slim
 # Set the working directory in the container
 WORKDIR /app
 
+# Set HuggingFace cache directory to /scratch to avoid disk space issues
+ENV HF_HOME=/scratch/huggingface_cache
+ENV HUGGINGFACE_HUB_CACHE=/scratch/huggingface_cache/hub
+ENV TRANSFORMERS_CACHE=/scratch/huggingface_cache/transformers
+ENV HF_DATASETS_CACHE=/scratch/huggingface_cache/datasets
+
+# Create the cache directory with proper permissions
+RUN mkdir -p /scratch/huggingface_cache && chmod 777 /scratch/huggingface_cache
+
 # Install system dependencies for PDF processing and marker-pdf
 RUN apt-get update && apt-get install -y \
     libgl1-mesa-glx \

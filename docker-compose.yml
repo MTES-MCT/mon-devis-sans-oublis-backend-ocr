@@ -6,13 +6,17 @@ services:
     env_file:
       - .env
     environment:
-      - HF_HOME=/root/.cache/huggingface
+      # Point all HuggingFace caches to /scratch directory
+      - HF_HOME=/scratch/huggingface_cache
+      - HUGGINGFACE_HUB_CACHE=/scratch/huggingface_cache/hub
+      - TRANSFORMERS_CACHE=/scratch/huggingface_cache/transformers
+      - HF_DATASETS_CACHE=/scratch/huggingface_cache/datasets
     ports:
       - "8000:80"
     volumes:
       - .:/app
       # Use bind mount to /scratch for Hugging Face cache (1.5TB available)
-      - /scratch/huggingface_cache:/root/.cache/huggingface
+      - /scratch/huggingface_cache:/scratch/huggingface_cache
     deploy:
       resources:
         reservations:
