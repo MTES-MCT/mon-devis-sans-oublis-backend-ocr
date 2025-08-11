@@ -1,3 +1,5 @@
+# Core dependencies
+packaging  # Required early for other packages' setup
 torch>=2.0.0
 gradio
 Pillow
@@ -17,6 +19,7 @@ img2pdf
 marker-pdf[full]==1.8.2
 surya-ocr
 # Dependencies for DotsOCR
-packaging  # optional; flash-attn disabled by default
 qwen-vl-utils
-# flash-attn  # optional; requires CUDA toolchain; set USE_FLASH_ATTENTION=1 to opt-in
+# Note: flash-attn is NOT installed by default as it requires CUDA build tools
+# DotsOCR will use SDPA (built-in PyTorch) instead
+# To enable flash attention: set USE_FLASH_ATTENTION=1 and manually install flash-attn
