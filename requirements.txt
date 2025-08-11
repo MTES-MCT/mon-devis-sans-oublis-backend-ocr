@@ -17,6 +17,6 @@ img2pdf
 marker-pdf[full]==1.8.2
 surya-ocr
 # Dependencies for DotsOCR
-packaging  # Required for flash-attn installation
+packaging  # optional; flash-attn disabled by default
 qwen-vl-utils
-flash-attn
+# flash-attn  # optional; requires CUDA toolchain; set USE_FLASH_ATTENTION=1 to opt-in
