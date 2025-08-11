@@ -18,4 +18,4 @@ marker-pdf[full]==1.8.2
 surya-ocr
 # Dependencies for DotsOCR
 qwen-vl-utils
-flash-attn==2.8.0.post2
+flash-attn
