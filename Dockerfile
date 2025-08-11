@@ -1,9 +1,15 @@
 # Use CUDA development image with Python 3.11 for flash-attn support
 FROM nvidia/cuda:12.1.0-cudnn8-devel-ubuntu22.04
 
+# Set non-interactive to avoid prompts during build
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
 # Install Python 3.11 and essential tools
 RUN apt-get update && apt-get install -y \
     software-properties-common \
+    tzdata \
+    && ln -fs /usr/share/zoneinfo/UTC /etc/localtime \
     && add-apt-repository ppa:deadsnakes/ppa \
     && apt-get update && apt-get install -y \
     python3.11 \
