@@ -8,9 +8,8 @@ if "HF_HOME" not in os.environ:
 if "TRANSFORMERS_CACHE" not in os.environ:
     os.environ["TRANSFORMERS_CACHE"] = "/scratch/huggingface_cache/transformers"
 
-import torch
-from transformers import AutoModelForCausalLM, AutoProcessor
 from PIL import Image
+# Heavy dependencies (torch, transformers) are imported lazily inside the class
 from typing import List
 from .base import BaseOCRService
 
@@ -25,10 +24,15 @@ class DotsOCRService(BaseOCRService):
     _service_name = "dotsocr"
 
     def __init__(self):
+        # Import heavy deps lazily to avoid import-time failures during discovery
+        from transformers import AutoModelForCausalLM, AutoProcessor
+        import torch as torch_lib
+        self.torch = torch_lib
+
         # Try to load the model with flash attention for better performance
         # Fall back to standard attention if flash attention is not available
         model_kwargs = {
-            "torch_dtype": torch.bfloat16,
+            "torch_dtype": self.torch.bfloat16,
             "device_map": "auto",
             "trust_remote_code": True
         }
@@ -116,7 +120,7 @@ class DotsOCRService(BaseOCRService):
                 )
                 
                 # Move to CUDA if available
-                if torch.cuda.is_available():
+                if self.torch.cuda.is_available():
                     inputs = inputs.to("cuda")
                 
                 # Generate output with a reasonable token limit for OCR

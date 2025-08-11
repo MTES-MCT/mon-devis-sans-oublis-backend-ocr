@@ -1,5 +1,5 @@
 from fastapi import APIRouter, File, UploadFile, Depends, HTTPException, status
-from app.services.ocr import get_service, OCR_SERVICES
+from app.services.ocr import get_service, service_names
 from app.models.ocr import OCRResponse
 from app.services.ocr.base import BaseOCRService
 from typing import List
@@ -129,4 +129,4 @@ async def list_services():
     """
     Returns a list of available OCR services.
     """
-    return {"services": list(OCR_SERVICES.keys())}
+    return {"services": service_names()}

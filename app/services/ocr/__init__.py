@@ -2,17 +2,21 @@ import pkgutil
 import inspect
 from .base import BaseOCRService
 
-# Dictionary to hold all registered OCR services
+# Registries
+# - OCR_SERVICE_CLASSES: discovered service classes (name -> class)
+# - OCR_SERVICES: instantiated singletons (name -> instance), created lazily
+OCR_SERVICE_CLASSES = {}
 OCR_SERVICES = {}
 
 def register_service(service_class):
     """
-    Registers an OCR service class in the OCR_SERVICES dictionary.
+    Register an OCR service CLASS in OCR_SERVICE_CLASSES.
+    Do NOT instantiate here to avoid heavy model loads at import time.
     """
-    if issubclass(service_class, BaseOCRService) and service_class is not BaseOCRService:
+    if inspect.isclass(service_class) and issubclass(service_class, BaseOCRService) and service_class is not BaseOCRService:
         service_name = getattr(service_class, '_service_name', None)
         if service_name and service_name != "base":
-            OCR_SERVICES[service_name] = service_class()
+            OCR_SERVICE_CLASSES[service_name] = service_class
 
 def discover_services():
     """
@@ -41,9 +45,23 @@ discover_services()
 
 def get_service(service_name: str) -> BaseOCRService:
     """
-    Returns an instance of the requested OCR service.
+    Returns a singleton instance of the requested OCR service, creating it lazily.
     """
-    service = OCR_SERVICES.get(service_name)
-    if not service:
+    if service_name in OCR_SERVICES:
+        return OCR_SERVICES[service_name]
+    service_class = OCR_SERVICE_CLASSES.get(service_name)
+    if not service_class:
         raise ValueError(f"OCR service '{service_name}' not found.")
-    return service
+    try:
+        instance = service_class()
+        OCR_SERVICES[service_name] = instance
+        return instance
+    except Exception as e:
+        # Surface a clear error rather than hiding the service
+        raise ValueError(f"Failed to initialize OCR service '{service_name}': {e}")
+
+def service_names():
+    """
+    Return the list of discovered OCR service names.
+    """
+    return list(OCR_SERVICE_CLASSES.keys())
