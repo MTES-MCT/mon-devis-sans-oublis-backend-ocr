@@ -59,6 +59,9 @@ RUN apt-get update && apt-get install -y \
 # Copy the requirements file into the container at /app
 COPY ./requirements.txt /app/requirements.txt
 
+# First install build dependencies that flash-attn needs during setup
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel packaging ninja
+
 # Install any needed packages specified in requirements.txt
 RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt --extra-index-url https://download.pytorch.org/whl/cu121
 

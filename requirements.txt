@@ -1,7 +1,4 @@
 # Core dependencies
-packaging  # Required early for other packages' setup
-wheel  # Required for building flash-attn
-setuptools  # Required for building flash-attn
 torch>=2.0.0
 gradio
 Pillow
