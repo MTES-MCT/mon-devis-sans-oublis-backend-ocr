@@ -1,0 +1,22 @@
+services:
+  api:
+    build: .
+    env_file:
+      - .env
+    environment:
+      - HF_HOME=/root/.cache/huggingface
+    ports:
+      - "8001:80"
+    volumes:
+      - .:/app
+      - huggingface_cache:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  huggingface_cache:
