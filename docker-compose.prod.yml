@@ -11,7 +11,7 @@ services:
       - "8000:80"
     environment:
       # API Security
-      - API_KEY=${API_KEY:-your-secure-api-key-here}
+      - API_KEY=${API_KEY}
       
       # Enable only marker service for production
       - ENABLED_SERVICES=marker
