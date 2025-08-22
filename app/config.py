@@ -23,7 +23,6 @@ class Config:
     PORT: int = int(os.getenv("PORT", "80"))
     
     # Gunicorn Configuration
-    BIND: str = f"{HOST}:{PORT}"
     WORKER_CONNECTIONS: int = int(os.getenv("WORKER_CONNECTIONS", "1000"))
     MAX_REQUESTS: int = int(os.getenv("MAX_REQUESTS", "1000"))
     MAX_REQUESTS_JITTER: int = int(os.getenv("MAX_REQUESTS_JITTER", "50"))
