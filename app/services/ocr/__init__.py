@@ -1,6 +1,7 @@
 import pkgutil
 import inspect
 from .base import BaseOCRService
+from app.config import config
 
 # Dictionary to hold all registered OCR services
 OCR_SERVICES = {}
@@ -8,11 +9,17 @@ OCR_SERVICES = {}
 def register_service(service_class):
     """
     Registers an OCR service class in the OCR_SERVICES dictionary.
+    Only registers services that are enabled in the configuration.
     """
     if issubclass(service_class, BaseOCRService) and service_class is not BaseOCRService:
         service_name = getattr(service_class, '_service_name', None)
         if service_name and service_name != "base":
-            OCR_SERVICES[service_name] = service_class()
+            # Only register if the service is enabled
+            if config.is_service_enabled(service_name):
+                OCR_SERVICES[service_name] = service_class()
+                print(f"Registered OCR service: {service_name}")
+            else:
+                print(f"Skipped OCR service (disabled): {service_name}")
 
 def discover_services():
     """

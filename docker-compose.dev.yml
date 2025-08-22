@@ -1,22 +1,79 @@
+version: '3.8'
+
 services:
-  api:
-    build: .
+  ocr-backend-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ocr-backend:dev
+    container_name: ocr-backend-dev
     env_file:
       - .env
     environment:
+      # API Security (for development, can be simple)
+      - API_KEY=${API_KEY:-dev-api-key}
+      
+      # Enable all services for development
+      - ENABLED_SERVICES=marker,nanonets,olmocr
+      
+      # Single worker for development (uses uvicorn directly)
+      - WORKERS=1
+      
+      # Development settings
+      - LOG_LEVEL=debug
+      - ACCESS_LOG=true
+      
+      # Server configuration
+      - HOST=0.0.0.0
+      - PORT=80
+      
+      # Hugging Face cache
       - HF_HOME=/root/.cache/huggingface
+      
+      # GPU support
+      - CUDA_VISIBLE_DEVICES=0
+      
     ports:
       - "8001:80"
+    
     volumes:
-      - .:/app
+      # Mount source code for hot reload
+      - ./app:/app/app
+      - ./gunicorn_config.py:/app/gunicorn_config.py
+      
+      # Persist model cache
       - huggingface_cache:/root/.cache/huggingface
+      
+      # Temporary files
+      - ./temp:/tmp
+    
     deploy:
       resources:
+        limits:
+          memory: 8G
         reservations:
+          memory: 4G
           devices:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-H", "x-api-key: ${API_KEY:-dev-api-key}", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "80", "--reload"]
 
 volumes:
   huggingface_cache:
+    driver: local
+
+networks:
+  default:
+    name: ocr-network-dev
+    driver: bridge

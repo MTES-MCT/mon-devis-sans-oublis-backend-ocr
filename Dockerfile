@@ -41,5 +41,11 @@ RUN python download_models.py
 # Now copy the rest of the application
 COPY . /app
 
-# Run uvicorn when the container launches
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "80"]
+# Default environment variables (can be overridden)
+ENV WORKERS=1
+ENV ENABLED_SERVICES="marker,nanonets,olmocr"
+ENV PORT=80
+ENV HOST=0.0.0.0
+
+# Run with Gunicorn for production, with fallback to uvicorn for development
+CMD ["sh", "-c", "if [ \"$WORKERS\" = \"1\" ]; then uvicorn app.main:app --host $HOST --port $PORT; else gunicorn app.main:app -c gunicorn_config.py; fi"]
