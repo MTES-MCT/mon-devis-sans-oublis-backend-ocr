@@ -51,4 +51,4 @@ ENV PORT=80
 ENV HOST=0.0.0.0
 
 # Run with Gunicorn for production, with fallback to uvicorn for development
-CMD ["sh", "-c", "if [ \"$WORKERS\" = \"1\" ]; then uvicorn app.main:app --host $HOST --port $PORT; else gunicorn app.main:app -c gunicorn_config.py; fi"]
+CMD ["sh", "-c", "if [ \"${WORKERS:-1}\" = \"1\" ]; then uvicorn app.main:app --host ${HOST:-0.0.0.0} --port ${PORT:-80}; else gunicorn app.main:app -c gunicorn_config.py; fi"]
