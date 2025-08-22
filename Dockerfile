@@ -32,7 +32,11 @@ COPY app/services/ocr/__init__.py /app/app/services/ocr/__init__.py
 
 COPY app/__init__.py /app/app/__init__.py
 COPY app/services/__init__.py /app/app/services/__init__.py
+COPY app/config.py /app/app/config.py
 COPY download_models.py /app/download_models.py
+
+# Set default environment variables for model download
+ENV ENABLED_SERVICES="marker,nanonets,olmocr"
 
 # Run the download script to populate the cache
 # This layer will be cached as long as the download-related files don't change.
@@ -41,9 +45,8 @@ RUN python download_models.py
 # Now copy the rest of the application
 COPY . /app
 
-# Default environment variables (can be overridden)
+# Default environment variables (can be overridden at runtime)
 ENV WORKERS=1
-ENV ENABLED_SERVICES="marker,nanonets,olmocr"
 ENV PORT=80
 ENV HOST=0.0.0.0
 
