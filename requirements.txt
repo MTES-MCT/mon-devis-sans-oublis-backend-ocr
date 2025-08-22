@@ -9,6 +9,7 @@ hf-transfer
 hf-xet
 fastapi
 uvicorn
+gunicorn
 python-multipart
 PyMuPDF
 apng
