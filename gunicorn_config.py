@@ -1,16 +1,16 @@
 import os
+
+# Import config values
 from app.config import config
 
 # Server socket
-bind = config.BIND
+bind = f"{config.HOST}:{config.PORT}"
 backlog = 2048
 
 # Worker processes
 workers = config.WORKERS
 worker_class = config.WORKER_CLASS
 worker_connections = config.WORKER_CONNECTIONS
-max_requests = config.MAX_REQUESTS
-max_requests_jitter = config.MAX_REQUESTS_JITTER
 timeout = config.TIMEOUT
 graceful_timeout = config.GRACEFUL_TIMEOUT
 keepalive = config.KEEPALIVE
