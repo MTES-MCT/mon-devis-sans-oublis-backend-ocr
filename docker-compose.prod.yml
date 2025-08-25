@@ -22,11 +22,12 @@ services:
       - WORKER_CONNECTIONS=1000
       
       # Performance tuning
-      - MAX_REQUESTS=1000
+      - MAX_REQUESTS=500  # Reduced to restart workers more frequently (prevent memory leaks)
       - MAX_REQUESTS_JITTER=50
-      - TIMEOUT=120
-      - GRACEFUL_TIMEOUT=30
+      - TIMEOUT=300  # Increased to 5 minutes for large PDFs
+      - GRACEFUL_TIMEOUT=60  # More time for graceful shutdown
       - KEEPALIVE=5
+      - THREADS=1  # Keep at 1 to avoid thread safety issues
       
       # Logging
       - LOG_LEVEL=info
@@ -39,9 +40,15 @@ services:
       # GPU support (if available)
       - CUDA_VISIBLE_DEVICES=0
       
+      # Prevent model re-downloading
+      - HF_HUB_OFFLINE=1
+      
     volumes:
       # Mount for temporary files if needed
       - ./temp:/tmp
+      
+      # Persist model cache to avoid re-downloading
+      - model_cache:/root/.cache
       
     deploy:
       resources:
@@ -58,10 +65,10 @@ services:
     
     healthcheck:
       test: ["CMD", "curl", "-f", "-H", "x-api-key: ${API_KEY:-your-secure-api-key-here}", "http://localhost/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      interval: 60s
+      timeout: 30s
+      retries: 5
+      start_period: 120s  # More time for workers to initialize
 
   # Optional: Nginx reverse proxy for load balancing multiple instances
   nginx:
@@ -78,6 +85,10 @@ services:
     restart: unless-stopped
     profiles:
       - with-nginx
+
+volumes:
+  model_cache:
+    driver: local
 
 networks:
   default:

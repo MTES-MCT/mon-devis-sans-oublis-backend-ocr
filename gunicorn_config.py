@@ -8,9 +8,18 @@ backlog = 2048
 workers = int(os.getenv('WORKERS', '1'))
 worker_class = os.getenv('WORKER_CLASS', 'uvicorn.workers.UvicornWorker')
 worker_connections = int(os.getenv('WORKER_CONNECTIONS', '1000'))
-timeout = int(os.getenv('TIMEOUT', '120'))
-graceful_timeout = int(os.getenv('GRACEFUL_TIMEOUT', '30'))
+
+# Timeouts - increased for PDF processing
+timeout = int(os.getenv('TIMEOUT', '300'))  # Increased to 5 minutes for large PDFs
+graceful_timeout = int(os.getenv('GRACEFUL_TIMEOUT', '60'))  # More time for graceful shutdown
 keepalive = int(os.getenv('KEEPALIVE', '5'))
+
+# Worker thread pool (for handling concurrent requests per worker)
+threads = int(os.getenv('THREADS', '1'))  # Keep at 1 to avoid thread safety issues
+
+# Don't preload the app - each worker needs its own model instance
+# to avoid thread-safety issues with pypdfium2 and marker models
+preload_app = False
 
 # Restart workers after this many requests, with some variability
 max_requests = int(os.getenv('MAX_REQUESTS', '1000'))
@@ -53,3 +62,10 @@ def on_starting(server):
     enabled_services = os.getenv('ENABLED_SERVICES', 'marker,nanonets,olmocr')
     server.log.info(f"Enabled services: {enabled_services}")
     server.log.info(f"Number of workers: {workers}")
+    server.log.info(f"Timeout: {timeout}s, Graceful timeout: {graceful_timeout}s")
+
+def worker_abort(worker):
+    worker.log.info(f"Worker {worker.pid} aborted!")
+    # Force cleanup on worker abort
+    import gc
+    gc.collect()
