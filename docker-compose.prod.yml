@@ -19,13 +19,14 @@ services:
       # Worker configuration - 4 workers for marker
       - WORKERS=4
       - WORKER_CLASS=uvicorn.workers.UvicornWorker
-      - WORKER_CONNECTIONS=1000
+      - WORKER_CONNECTIONS=100  # Max concurrent requests per worker
+      - BACKLOG=2048  # Queue size for pending connections
       
       # Performance tuning
-      - MAX_REQUESTS=500  # Reduced to restart workers more frequently (prevent memory leaks)
+      - MAX_REQUESTS=500  # Restart workers after 500 requests (prevent memory leaks)
       - MAX_REQUESTS_JITTER=50
-      - TIMEOUT=300  # Increased to 5 minutes for large PDFs
-      - GRACEFUL_TIMEOUT=60  # More time for graceful shutdown
+      - TIMEOUT=300  # 5 minutes for large PDFs
+      - GRACEFUL_TIMEOUT=60  # Time for graceful shutdown
       - KEEPALIVE=5
       - THREADS=1  # Keep at 1 to avoid thread safety issues
       
@@ -70,7 +71,7 @@ services:
       retries: 5
       start_period: 120s  # More time for workers to initialize
 
-  # Optional: Nginx reverse proxy for load balancing multiple instances
+  # Nginx reverse proxy for better request handling and queuing
   nginx:
     image: nginx:alpine
     container_name: ocr-nginx-prod
@@ -83,8 +84,13 @@ services:
     depends_on:
       - ocr-backend
     restart: unless-stopped
-    profiles:
-      - with-nginx
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 volumes:
   model_cache:
