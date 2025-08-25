@@ -37,10 +37,14 @@ COPY download_models.py /app/download_models.py
 
 # Set default environment variables for model download
 ENV ENABLED_SERVICES="marker,nanonets,olmocr"
+ENV HF_HUB_OFFLINE="0"
 
 # Run the download script to populate the cache
 # This layer will be cached as long as the download-related files don't change.
 RUN python download_models.py
+
+# After models are downloaded, set offline mode as default
+ENV HF_HUB_OFFLINE="1"
 
 # Now copy the rest of the application
 COPY . /app
