@@ -25,7 +25,7 @@ services:
       # Performance tuning
       - MAX_REQUESTS=500  # Restart workers after 500 requests (prevent memory leaks)
       - MAX_REQUESTS_JITTER=50
-      - TIMEOUT=300  # 5 minutes for large PDFs
+      - TIMEOUT=600  # 10 minutes for large PDFs
       - GRACEFUL_TIMEOUT=60  # Time for graceful shutdown
       - KEEPALIVE=5
       - THREADS=1  # Keep at 1 to avoid thread safety issues
@@ -53,8 +53,6 @@ services:
       
     deploy:
       resources:
-        limits:
-          memory: 8G
         reservations:
           memory: 4G
           devices:
