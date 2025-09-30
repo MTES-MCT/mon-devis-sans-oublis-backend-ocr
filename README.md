@@ -60,7 +60,7 @@ certbot --nginx -d ocr.mon-devis-sans-oublis.beta.gouv.fr
 ## Deployment
 
 ### Server Information
-- **Server IP**: 51.159.149.211
+- **Server IP**: SERVER_IP
 - **User**: root | erwan
 - **Project Location**: `/mon-devis-sans-oublis-backend-ocr/`
 
@@ -70,7 +70,7 @@ To redeploy the application on the production server, follow these steps:
 
 1. **Connect to the server via SSH**:
    ```bash
-   ssh root@51.159.149.211
+   ssh root@SERVER_IP
    ```
 
 2. **Navigate to the project directory**:
