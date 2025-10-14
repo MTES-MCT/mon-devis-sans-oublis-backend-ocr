@@ -1,7 +1,12 @@
 import pkgutil
 import inspect
+import logging
 from .base import BaseOCRService
 from app.config import config
+from sentry_sdk import logger as sentry_logger
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # Dictionary to hold all registered OCR services
 OCR_SERVICES = {}
@@ -52,5 +57,12 @@ def get_service(service_name: str) -> BaseOCRService:
     """
     service = OCR_SERVICES.get(service_name)
     if not service:
+        sentry_logger.error(
+            'OCR service not found',
+            attributes={
+                'service.name': service_name,
+                'available.services': list(OCR_SERVICES.keys())
+            }
+        )
         raise ValueError(f"OCR service '{service_name}' not found.")
     return service

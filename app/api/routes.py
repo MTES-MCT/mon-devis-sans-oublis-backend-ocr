@@ -22,6 +22,7 @@ import uuid
 import logging
 from fastapi.concurrency import run_in_threadpool
 from apng import APNG
+from sentry_sdk import logger as sentry_logger
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +108,14 @@ def file_to_images(file: UploadFile) -> List[Image.Image]:
     SUPPORTED_FORMATS = [".pdf", ".png", ".jpg", ".jpeg", ".bmp", ".gif"]
 
     if file_extension not in SUPPORTED_FORMATS:
+        sentry_logger.warning(
+            'Unsupported file format',
+            attributes={
+                'file.name': file.filename,
+                'file.extension': file_extension,
+                'error.type': 'InvalidFileFormatError'
+            }
+        )
         raise InvalidFileFormatError(file_extension, SUPPORTED_FORMATS)
 
     try:
@@ -142,12 +151,27 @@ def file_to_images(file: UploadFile) -> List[Image.Image]:
                         else:
                             images.append(img.convert('RGB') if img.mode != 'RGB' else img.copy())
             except Exception as e:
+                sentry_logger.error(
+                    'Failed to load image',
+                    attributes={
+                        'file.name': file.filename,
+                        'error.type': type(e).__name__,
+                        'error.message': str(e)
+                    }
+                )
                 raise CorruptedImageError(
                     filename=file.filename,
                     error_detail=str(e)
                 )
                 
         if not images:
+            sentry_logger.error(
+                'No images extracted from file',
+                attributes={
+                    'file.name': file.filename,
+                    'error.type': 'NoImagesExtracted'
+                }
+            )
             raise CorruptedImageError(
                 filename=file.filename,
                 error_detail="No images could be extracted from the file"
@@ -157,6 +181,14 @@ def file_to_images(file: UploadFile) -> List[Image.Image]:
         # Re-raise our custom exceptions
         raise
     except Exception as e:
+        sentry_logger.error(
+            'Unexpected error processing file',
+            attributes={
+                'file.name': file.filename,
+                'error.type': type(e).__name__,
+                'error.message': str(e)
+            }
+        )
         # Catch any unexpected errors
         raise OCRException(
             message=f"Unexpected error processing file: {file.filename}",
@@ -170,10 +202,17 @@ def file_to_images(file: UploadFile) -> List[Image.Image]:
             try:
                 os.remove(temp_file_path)
                 # Log successful cleanup for audit
-                logger.debug(f"Temporary file deleted: {temp_file_path}")
             except OSError as e:
                 # Log error but don't fail the request
                 logger.warning(f"Failed to delete temp file {temp_file_path}: {e}")
+                sentry_logger.error(
+                    'Failed to delete temporary file',
+                    attributes={
+                        'file.name': file.filename,
+                        'temp.file.path': temp_file_path,
+                        'error.type': type(e).__name__
+                    }
+                )
                 # Try to schedule cleanup later
                 import atexit
                 atexit.register(lambda: os.path.exists(temp_file_path) and os.remove(temp_file_path))
@@ -221,7 +260,13 @@ async def ocr(
             results = await run_in_threadpool(ocr_service.process_images, images)
         except torch.cuda.OutOfMemoryError:
             # Clear GPU memory and retry once
-            logger.warning(f"GPU OOM in {service_name}, attempting retry...")
+            sentry_logger.warning(
+                'GPU out of memory, attempting retry',
+                attributes={
+                    'ocr.service': service_name,
+                    'retry.attempt': 1
+                }
+            )
             torch.cuda.empty_cache()
             gc.collect()
             
@@ -229,9 +274,25 @@ async def ocr(
                 results = await run_in_threadpool(ocr_service.process_images, images)
             except torch.cuda.OutOfMemoryError:
                 # If it fails again, raise custom exception
+                sentry_logger.error(
+                    'GPU out of memory after retry',
+                    attributes={
+                        'ocr.service': service_name,
+                        'retry.attempted': True,
+                        'retry.success': False
+                    }
+                )
                 raise GPUMemoryError(service_name=service_name, retry_attempted=True)
                 
         except Exception as e:
+            sentry_logger.error(
+                'OCR processing failed',
+                attributes={
+                    'ocr.service': service_name,
+                    'error.type': type(e).__name__,
+                    'error.message': str(e)
+                }
+            )
             # Clear GPU memory on any error
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
@@ -271,7 +332,8 @@ async def list_services():
     """
     Returns a list of available OCR services.
     """
-    return {"services": list(OCR_SERVICES.keys())}
+    services = list(OCR_SERVICES.keys())
+    return {"services": services}
 
 @router.get("/health")
 async def health_check():
@@ -302,8 +364,14 @@ async def health_check():
                 "available": False,
                 "error": str(e)
             }
+            sentry_logger.error(
+                'GPU health check failed',
+                attributes={
+                    'error.type': type(e).__name__,
+                    'error.message': str(e)
+                }
+            )
     else:
         health_status["gpu"] = {"available": False}
-    
     return health_status
                 

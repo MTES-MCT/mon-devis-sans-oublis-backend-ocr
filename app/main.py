@@ -1,11 +1,14 @@
-import os
 import logging
+import os
+
 import sentry_sdk
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.responses import JSONResponse
+from fastapi.security import APIKeyHeader
+from sentry_sdk import logger as sentry_logger
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.logging import LoggingIntegration
-from fastapi import Depends, FastAPI, HTTPException, status
-from fastapi.security import APIKeyHeader
-from fastapi.responses import JSONResponse
+
 from app.api.routes import router as api_router
 from app.config import config
 from app.exceptions import OCRException
@@ -35,10 +38,11 @@ def before_send_filter(event, hint):
             }
     return event
 
-# Enhanced Sentry initialization
+# Enhanced Sentry initialization with logs enabled
 sentry_sdk.init(
     dsn=os.getenv("SENTRY_DSN"),  # Fixed typo from SENTRY_DNS
     environment=os.getenv("ENVIRONMENT", "production"),
+    enable_logs=True,  # Enable structured logging
     integrations=[
         FastApiIntegration(
             transaction_style="endpoint",
@@ -46,7 +50,8 @@ sentry_sdk.init(
         ),
         LoggingIntegration(
             level=logging.INFO,
-            event_level=logging.ERROR
+            event_level=logging.ERROR,
+            sentry_logs_level=logging.INFO  # Send INFO and above to Sentry logs
         )
     ],
     traces_sample_rate=1.0 if os.getenv("ENVIRONMENT") == "development" else 0.1,
@@ -69,6 +74,19 @@ async def ocr_exception_handler(request, exc: OCRException):
     """Handle all OCR custom exceptions with proper status codes and Sentry logging"""
     
     # Log to Sentry with context
+    sentry_logger.error(
+        'OCR exception occurred',
+        attributes={
+            'exception.type': exc.__class__.__name__,
+            'exception.message': exc.message,
+            'exception.status_code': exc.status_code,
+            'exception.details': exc.details,
+            'request.url': str(request.url),
+            'request.method': request.method
+        }
+    )
+    
+    # Also capture as exception in Sentry
     with sentry_sdk.push_scope() as scope:
         scope.set_tag("exception_type", exc.__class__.__name__)
         scope.set_context("exception_details", exc.details)
@@ -96,7 +114,26 @@ app.include_router(api_router)
 @app.on_event("startup")
 async def startup_event():
     """Log startup information"""
-    print(f"Starting OCR Backend Service")
-    print(f"Enabled services: {config.get_enabled_services()}")
-    print(f"Workers configured: {config.WORKERS}")
-    print(f"API Key protection: {'Enabled' if config.API_KEY else 'Disabled'}")
+    startup_info = {
+        'service': 'OCR Backend Service',
+        'enabled_services': config.get_enabled_services(),
+        'workers': config.WORKERS,
+        'api_key_protection': 'Enabled' if config.API_KEY else 'Disabled'
+    }
+    
+    # Log to console for backward compatibility
+    print(f"Starting {startup_info['service']}")
+    print(f"Enabled services: {startup_info['enabled_services']}")
+    print(f"Workers configured: {startup_info['workers']}")
+    print(f"API Key protection: {startup_info['api_key_protection']}")
+    
+    # Log to Sentry
+    sentry_logger.info(
+        'OCR service starting up',
+        attributes={
+            'ocr.enabled_services': startup_info['enabled_services'],
+            'ocr.workers': startup_info['workers'],
+            'ocr.api_key_protection': startup_info['api_key_protection'],
+            'service.name': 'ocr-backend'
+        }
+    )
