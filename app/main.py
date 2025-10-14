@@ -28,10 +28,6 @@ app = FastAPI(
     dependencies=[Depends(get_api_key)]
 )
 
-@app.get("/sentry-debug")
-async def trigger_error():
-    division_by_zero = 1 / 0
-
 app.include_router(api_router)
 
 @app.on_event("startup")
