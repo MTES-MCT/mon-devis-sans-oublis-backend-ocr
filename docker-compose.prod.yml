@@ -12,6 +12,7 @@ services:
     environment:
       # API Security
       - API_KEY=${API_KEY}
+      - SENTRY_DNS=${SENTRY_DNS}
       
       # Enable only marker service for production
       - ENABLED_SERVICES=marker
