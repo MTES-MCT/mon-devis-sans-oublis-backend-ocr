@@ -10,8 +10,15 @@ import img2pdf
 from marker.converters.pdf import PdfConverter
 from marker.models import create_model_dict
 from marker.output import text_from_rendered
+from marker.config.parser import ConfigParser
 from .base import BaseOCRService
 
+
+config = {
+    "output_format": "markdown",
+    "force_ocr": "true"
+}
+config_parser = ConfigParser(config)
 
 class MarkerOCRService(BaseOCRService):
     _service_name = "marker"
@@ -54,6 +61,7 @@ class MarkerOCRService(BaseOCRService):
                     
                     converter = PdfConverter(
                         artifact_dict=create_model_dict(),
+                        config=config_parser.generate_config_dict(),
                     )
                     
                     # Store converter for this worker
