@@ -15,6 +15,6 @@ PyMuPDF
 apng
 img2pdf
 # Install marker-pdf with all dependencies
-marker-pdf[full]==1.8.2
+marker-pdf[full]==1.10.1
 surya-ocr
 sentry-sdk==2.38.0
