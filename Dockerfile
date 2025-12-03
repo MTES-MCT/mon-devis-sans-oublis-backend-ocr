@@ -1,4 +1,8 @@
 # Use an official Python runtime as a parent image
+# Note: Flash Attention 2 requires CUDA development tools (nvcc).
+# Using slim image means Flash Attention won't be available, but the service
+# will work correctly with standard attention (just slightly slower).
+# For Flash Attention support, use nvidia/cuda:12.1.0-cudnn8-devel-ubuntu22.04 as base
 FROM python:3.11-slim
 
 # Set the working directory in the container
@@ -26,11 +30,12 @@ RUN python -m pip install --upgrade pip
 
 # Copy the requirements file into the container at /app
 COPY ./requirements.txt /app/requirements.txt
-# Install PyTorch first (required for flash-attn)
+# Install PyTorch first
 RUN pip install --no-cache-dir torch==2.6.0 torchvision --extra-index-url https://download.pytorch.org/whl/cu121
 
-# Install flash-attn from pre-built wheels (much faster than building from source)
-RUN pip install --no-cache-dir flash-attn --no-build-isolation || echo "Flash Attention installation failed, will use standard attention"
+# Note: Flash Attention is skipped in slim image (requires nvcc/CUDA dev tools not available in slim)
+# Services will automatically use standard attention (still works, just slightly slower)
+# To enable Flash Attention, use nvidia/cuda:12.1.0-cudnn8-devel-ubuntu22.04 as base image
 
 # Install remaining packages
 RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt --extra-index-url https://download.pytorch.org/whl/cu121
