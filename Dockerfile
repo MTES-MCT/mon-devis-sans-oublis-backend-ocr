@@ -22,11 +22,12 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
+RUN python -m pip install --upgrade pip
+
 # Copy the requirements file into the container at /app
 COPY ./requirements.txt /app/requirements.txt
-
 # Install PyTorch first (required for flash-attn)
-RUN pip install --no-cache-dir torch>=2.0.0 torchvision --extra-index-url https://download.pytorch.org/whl/cu121
+RUN pip install --no-cache-dir torch==2.6.0 torchvision --extra-index-url https://download.pytorch.org/whl/cu121
 
 # Install flash-attn from pre-built wheels (much faster than building from source)
 RUN pip install --no-cache-dir flash-attn --no-build-isolation || echo "Flash Attention installation failed, will use standard attention"
