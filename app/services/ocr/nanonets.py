@@ -1,6 +1,6 @@
 import torch
 import gc
-from transformers import AutoProcessor, AutoModelForImageTextToText, pipeline
+from transformers import AutoProcessor, AutoModelForImageTextToText
 from PIL import Image
 from typing import List
 from .base import BaseOCRService
@@ -11,17 +11,12 @@ class NanonetsOCRService(BaseOCRService):
     def __init__(self):
         seed = 42
         torch.Generator().manual_seed(seed)
-        processor = AutoProcessor.from_pretrained("nanonets/Nanonets-OCR-s")
-        model = AutoModelForImageTextToText.from_pretrained(
+        self.processor = AutoProcessor.from_pretrained("nanonets/Nanonets-OCR-s")
+        self.model = AutoModelForImageTextToText.from_pretrained(
             "nanonets/Nanonets-OCR-s", torch_dtype=torch.bfloat16, device_map="auto"
         )
-        self.pipeline = pipeline(
-            "image-text-to-text",
-            model=model,
-            processor=processor,
-        )
         # Store device for memory management
-        self.device = next(model.parameters()).device
+        self.device = next(self.model.parameters()).device
 
     def process_images(self, images: List[Image.Image]) -> List[str]:
         prompt = "Extract and return all the text from this image. Include all text elements and maintain the reading order and line breaks. If there are tables, convert them to markdown format while including line breaks in the cells using <br/> tag. If there are mathematical equations, convert them to LaTeX format. Escape characters if necessary. Cells might contain long text, do not create new cells on your own."
@@ -43,25 +38,36 @@ class NanonetsOCRService(BaseOCRService):
                 ]
                 
                 try:
-                    # Process with explicit memory management
-                    with torch.cuda.amp.autocast(enabled=True):
-                        ocr_result = self.pipeline(messages, max_new_tokens=8096)
+                    # Process directly with model and processor to avoid multiprocessing issues
+                    text = self.processor.apply_chat_template(
+                        messages, add_generation_prompt=True
+                    )
+                    inputs = self.processor(
+                        text=[text],
+                        images=[image],
+                        return_tensors="pt",
+                        padding=True
+                    ).to(self.device)
                     
-                    if ocr_result and isinstance(ocr_result, list) and "generated_text" in ocr_result[0]:
-                        generated_content = ocr_result[0]["generated_text"]
-                        if isinstance(generated_content, list):
-                            assistant_messages = [
-                                message["content"]
-                                for message in generated_content
-                                if message.get("role") == "assistant"
-                            ]
-                            if assistant_messages:
-                                results.append(assistant_messages[-1])
-                                continue
-                        elif isinstance(generated_content, str):
-                            results.append(generated_content)
-                            continue
-                    results.append("") # Append empty string if no result
+                    # Generate with explicit memory management
+                    with torch.cuda.amp.autocast(enabled=True):
+                        with torch.no_grad():
+                            generated_ids = self.model.generate(
+                                **inputs,
+                                max_new_tokens=8096,
+                                do_sample=False
+                            )
+                    
+                    # Decode the output
+                    generated_text = self.processor.batch_decode(
+                        generated_ids[:, inputs.input_ids.shape[1]:],
+                        skip_special_tokens=True
+                    )[0]
+                    
+                    results.append(generated_text if generated_text else "")
+                    
+                    # Clean up inputs immediately
+                    del inputs, generated_ids
                     
                 except torch.cuda.OutOfMemoryError:
                     # Clear GPU memory and retry
