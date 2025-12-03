@@ -5,10 +5,14 @@ FROM nvidia/cuda:12.1.0-cudnn8-devel-ubuntu22.04
 # Set the working directory in the container
 WORKDIR /app
 
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Etc/UTC
+
 # Install Python 3.11 and system dependencies
 RUN apt-get update && apt-get install -y \
     software-properties-common \
-    && add-apt-repository ppa:deadsnakes/ppa \
+    && add-apt-repository ppa:deadsnakes/ppa -y \
     && apt-get update && apt-get install -y \
     python3.11 \
     python3.11-dev \
