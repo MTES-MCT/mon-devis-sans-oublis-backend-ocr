@@ -1,15 +1,19 @@
-# Use an official Python runtime as a parent image
-# Note: Flash Attention 2 requires CUDA development tools (nvcc).
-# Using slim image means Flash Attention won't be available, but the service
-# will work correctly with standard attention (just slightly slower).
-# For Flash Attention support, use nvidia/cuda:12.1.0-cudnn8-devel-ubuntu22.04 as base
-FROM python:3.11-slim
+# Use NVIDIA CUDA development image for Flash Attention compilation
+# This image includes nvcc and CUDA development tools required for Flash Attention
+FROM nvidia/cuda:12.1.0-cudnn8-devel-ubuntu22.04
 
 # Set the working directory in the container
 WORKDIR /app
 
-# Install system dependencies for PDF processing, marker-pdf, and Flash Attention compilation
+# Install Python 3.11 and system dependencies
 RUN apt-get update && apt-get install -y \
+    software-properties-common \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y \
+    python3.11 \
+    python3.11-dev \
+    python3.11-distutils \
+    python3-pip \
     libgl1 \
     libglib2.0-0 \
     libsm6 \
@@ -26,16 +30,22 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-RUN python -m pip install --upgrade pip
+# Set Python 3.11 as default python3
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 \
+    && update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
+
+# Upgrade pip
+RUN python3.11 -m pip install --upgrade pip setuptools wheel
 
 # Copy the requirements file into the container at /app
 COPY ./requirements.txt /app/requirements.txt
-# Install PyTorch first
+# Install PyTorch first (required for Flash Attention compilation)
 RUN pip install --no-cache-dir torch==2.6.0 torchvision --extra-index-url https://download.pytorch.org/whl/cu121
 
-# Note: Flash Attention is skipped in slim image (requires nvcc/CUDA dev tools not available in slim)
-# Services will automatically use standard attention (still works, just slightly slower)
-# To enable Flash Attention, use nvidia/cuda:12.1.0-cudnn8-devel-ubuntu22.04 as base image
+# Install Flash Attention 2 (now possible with CUDA devel image)
+# Set MAX_JOBS to control parallel compilation (prevent OOM during build)
+ENV MAX_JOBS=4
+RUN pip install --no-cache-dir flash-attn --no-build-isolation
 
 # Install remaining packages
 RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt --extra-index-url https://download.pytorch.org/whl/cu121
