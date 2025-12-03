@@ -13,7 +13,10 @@ class NanonetsOCRService(BaseOCRService):
         torch.Generator().manual_seed(seed)
         self.processor = AutoProcessor.from_pretrained("nanonets/Nanonets-OCR-s")
         self.model = AutoModelForImageTextToText.from_pretrained(
-            "nanonets/Nanonets-OCR-s", torch_dtype=torch.bfloat16, device_map="auto"
+            "nanonets/Nanonets-OCR-s",
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+            attn_implementation="flash_attention_2"
         )
         # Store device for memory management
         self.device = next(self.model.parameters()).device
