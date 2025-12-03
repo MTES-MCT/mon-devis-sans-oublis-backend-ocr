@@ -19,15 +19,19 @@ RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     ninja-build \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the requirements file into the container at /app
 COPY ./requirements.txt /app/requirements.txt
 
-# Install PyTorch first (required for flash-attn compilation)
+# Install PyTorch first (required for flash-attn)
 RUN pip install --no-cache-dir torch>=2.0.0 torchvision --extra-index-url https://download.pytorch.org/whl/cu121
 
-# Install remaining packages including flash-attn (which requires torch during build)
+# Install flash-attn from pre-built wheels (much faster than building from source)
+RUN pip install --no-cache-dir flash-attn --no-build-isolation || echo "Flash Attention installation failed, will use standard attention"
+
+# Install remaining packages
 RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt --extra-index-url https://download.pytorch.org/whl/cu121
 
 # First copy only the files needed for downloading models

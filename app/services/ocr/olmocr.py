@@ -11,12 +11,24 @@ class OlmOCRService(BaseOCRService):
 
     def __init__(self):
         self.processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct")
-        self.model = Qwen2VLForConditionalGeneration.from_pretrained(
-            "allenai/olmOCR-7B-0225-preview",
-            torch_dtype=torch.bfloat16,
-            device_map="auto",
-            attn_implementation="flash_attention_2"
-        )
+        
+        # Try to use Flash Attention 2, fall back to standard attention if not available
+        try:
+            self.model = Qwen2VLForConditionalGeneration.from_pretrained(
+                "allenai/olmOCR-7B-0225-preview",
+                torch_dtype=torch.bfloat16,
+                device_map="auto",
+                attn_implementation="flash_attention_2"
+            )
+            print("✓ OlmOCR: Using Flash Attention 2")
+        except Exception as e:
+            print(f"⚠ OlmOCR: Flash Attention 2 not available, using standard attention: {e}")
+            self.model = Qwen2VLForConditionalGeneration.from_pretrained(
+                "allenai/olmOCR-7B-0225-preview",
+                torch_dtype=torch.bfloat16,
+                device_map="auto"
+            )
+        
         # Store device for memory management
         self.device = next(self.model.parameters()).device
 

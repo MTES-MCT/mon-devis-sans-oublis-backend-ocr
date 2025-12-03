@@ -12,12 +12,24 @@ class NanonetsOCRService(BaseOCRService):
         seed = 42
         torch.Generator().manual_seed(seed)
         self.processor = AutoProcessor.from_pretrained("nanonets/Nanonets-OCR-s")
-        self.model = AutoModelForImageTextToText.from_pretrained(
-            "nanonets/Nanonets-OCR-s",
-            torch_dtype=torch.bfloat16,
-            device_map="auto",
-            attn_implementation="flash_attention_2"
-        )
+        
+        # Try to use Flash Attention 2, fall back to standard attention if not available
+        try:
+            self.model = AutoModelForImageTextToText.from_pretrained(
+                "nanonets/Nanonets-OCR-s",
+                torch_dtype=torch.bfloat16,
+                device_map="auto",
+                attn_implementation="flash_attention_2"
+            )
+            print("✓ Nanonets: Using Flash Attention 2")
+        except Exception as e:
+            print(f"⚠ Nanonets: Flash Attention 2 not available, using standard attention: {e}")
+            self.model = AutoModelForImageTextToText.from_pretrained(
+                "nanonets/Nanonets-OCR-s",
+                torch_dtype=torch.bfloat16,
+                device_map="auto"
+            )
+        
         # Store device for memory management
         self.device = next(self.model.parameters()).device
 
