@@ -4,7 +4,7 @@ FROM python:3.11-slim
 # Set the working directory in the container
 WORKDIR /app
 
-# Install system dependencies for PDF processing and marker-pdf
+# Install system dependencies for PDF processing, marker-pdf, and Flash Attention compilation
 RUN apt-get update && apt-get install -y \
     libgl1 \
     libglib2.0-0 \
@@ -15,12 +15,19 @@ RUN apt-get update && apt-get install -y \
     wget \
     poppler-utils \
     tesseract-ocr \
+    build-essential \
+    gcc \
+    g++ \
+    ninja-build \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the requirements file into the container at /app
 COPY ./requirements.txt /app/requirements.txt
 
-# Install any needed packages specified in requirements.txt
+# Install PyTorch first (required for flash-attn compilation)
+RUN pip install --no-cache-dir torch>=2.0.0 torchvision --extra-index-url https://download.pytorch.org/whl/cu121
+
+# Install remaining packages including flash-attn (which requires torch during build)
 RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt --extra-index-url https://download.pytorch.org/whl/cu121
 
 # First copy only the files needed for downloading models
