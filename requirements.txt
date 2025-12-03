@@ -7,7 +7,6 @@ torchvision
 accelerate
 hf-transfer
 hf-xet
-flash-attn --no-build-isolation
 fastapi
 uvicorn
 gunicorn
