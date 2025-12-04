@@ -43,10 +43,14 @@ def discover_services():
                 register_service(obj)
         except ImportError as e:
             # Skip modules that can't be imported (e.g., marker during build phase)
-            pass
+            logger.warning(f"Could not import module {module_name}: {e}")
+            print(f"⚠ Could not import module {module_name}: {e}")
         except Exception as e:
             # Log other errors but continue
-            pass
+            logger.error(f"Error discovering service in {module_name}: {e}")
+            print(f"❌ Error discovering service in {module_name}: {e}")
+            import traceback
+            traceback.print_exc()
 
 # Discover and register services when the package is imported
 discover_services()
