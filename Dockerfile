@@ -44,11 +44,9 @@ RUN python3.11 -m pip install --upgrade pip setuptools wheel
 # Copy the requirements file into the container at /app
 COPY ./requirements.txt /app/requirements.txt
 # Install PyTorch first (required for Flash Attention compilation)
-# Use PyTorch 2.5.1 which is known to be compatible with flash-attn
 RUN pip install --no-cache-dir torch==2.5.1 torchvision==0.20.1 --extra-index-url https://download.pytorch.org/whl/cu121
 
-# Install Flash Attention 2 (now possible with CUDA devel image)
-# Set MAX_JOBS to control parallel compilation (prevent OOM during build)
+# Install Flash Attention 2 (marker-pdf removed to avoid dependency conflicts)
 ENV MAX_JOBS=4
 RUN pip install --no-cache-dir flash-attn==2.7.2.post1 --no-build-isolation
 
@@ -68,7 +66,8 @@ COPY app/config.py /app/app/config.py
 COPY download_models.py /app/download_models.py
 
 # Set default environment variables for model download
-ENV ENABLED_SERVICES="marker,nanonets,olmocr"
+# marker service disabled (marker-pdf conflicts with Flash Attention)
+ENV ENABLED_SERVICES="nanonets,olmocr"
 ENV HF_HUB_OFFLINE="0"
 
 # Run the download script to populate the cache
