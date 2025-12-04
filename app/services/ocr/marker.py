@@ -10,6 +10,7 @@ import img2pdf
 from marker.converters.pdf import PdfConverter
 from marker.models import create_model_dict
 from marker.output import text_from_rendered
+from marker.config.parser import ConfigParser
 from .base import BaseOCRService
 
 
@@ -52,7 +53,16 @@ class MarkerOCRService(BaseOCRService):
                     if len(MarkerOCRService._worker_converters) > 0:
                         time.sleep(0.5 * len(MarkerOCRService._worker_converters))
                     
+                    # Configure marker to force OCR on all pages
+                    config = {
+                        "force_ocr": True,  # Force OCR on all pages
+                    }
+                    config_parser = ConfigParser(config)
+                    config_dict = config_parser.generate_config_dict()
+                    
+                    # Create converter with force_ocr enabled
                     converter = PdfConverter(
+                        config=config_dict,
                         artifact_dict=create_model_dict(),
                     )
                     
