@@ -7,10 +7,15 @@ import gc
 from typing import List, Optional
 from PIL import Image
 import img2pdf
+import torch
 from marker.converters.pdf import PdfConverter
 from marker.models import create_model_dict
 from marker.output import text_from_rendered
 from marker.config.parser import ConfigParser
+from surya.ocr import run_ocr
+from surya.model.detection.model import load_model as load_det_model, load_processor as load_det_processor
+from surya.model.recognition.model import load_model as load_rec_model
+from surya.model.recognition.processor import load_processor as load_rec_processor
 from .base import BaseOCRService
 
 
@@ -23,25 +28,30 @@ class MarkerOCRService(BaseOCRService):
         super().__init__()
         self.lock = threading.Lock()  # Lock to serialize PDF processing
         self._converter = None
+        self._surya_models = None
         self._ensure_initialized()
 
     def _ensure_initialized(self):
-        """Ensure each worker has its own converter instance"""
+        """Ensure each worker has its own models"""
         # Get current process ID
         pid = os.getpid()
         
-        # Check if this worker already has a converter
+        # Check if this worker already has models
         if pid in MarkerOCRService._worker_converters:
-            self._converter = MarkerOCRService._worker_converters[pid]
+            stored_data = MarkerOCRService._worker_converters[pid]
+            self._converter = stored_data.get('converter')
+            self._surya_models = stored_data.get('surya_models')
             return
         
         with MarkerOCRService._initialization_lock:
             # Double-check after acquiring lock
             if pid in MarkerOCRService._worker_converters:
-                self._converter = MarkerOCRService._worker_converters[pid]
+                stored_data = MarkerOCRService._worker_converters[pid]
+                self._converter = stored_data.get('converter')
+                self._surya_models = stored_data.get('surya_models')
                 return
             
-            # Initialize the marker converter for this worker
+            # Initialize the models for this worker
             max_retries = 3
             for attempt in range(max_retries):
                 try:
@@ -53,33 +63,49 @@ class MarkerOCRService(BaseOCRService):
                     if len(MarkerOCRService._worker_converters) > 0:
                         time.sleep(0.5 * len(MarkerOCRService._worker_converters))
                     
-                    # Configure marker to force OCR on all pages
+                    # Load Surya OCR models for direct image processing
+                    print(f"Loading Surya OCR models for worker {pid}...")
+                    det_model = load_det_model()
+                    det_processor = load_det_processor()
+                    rec_model = load_rec_model()
+                    rec_processor = load_rec_processor()
+                    
+                    surya_models = {
+                        'det_model': det_model,
+                        'det_processor': det_processor,
+                        'rec_model': rec_model,
+                        'rec_processor': rec_processor
+                    }
+                    
+                    # Configure marker for PDF processing (when needed)
                     config = {
-                        "force_ocr": True,  # Force OCR on all pages
-                        "strip_existing_ocr": True,  # Remove existing OCR artifacts and re-OCR
-                        "disable_image_extraction": True,  # Disable image extraction to force OCR on images
+                        "force_ocr": True,
+                        "strip_existing_ocr": True,
                     }
                     config_parser = ConfigParser(config)
                     config_dict = config_parser.generate_config_dict()
                     
-                    # Create converter with force_ocr enabled
                     converter = PdfConverter(
                         config=config_dict,
                         artifact_dict=create_model_dict(),
                     )
                     
-                    # Store converter for this worker
-                    MarkerOCRService._worker_converters[pid] = converter
+                    # Store both models for this worker
+                    MarkerOCRService._worker_converters[pid] = {
+                        'converter': converter,
+                        'surya_models': surya_models
+                    }
                     self._converter = converter
+                    self._surya_models = surya_models
                     
-                    print(f"Marker OCR service initialized for worker {pid} on attempt {attempt + 1}")
+                    print(f"Marker OCR service with Surya models initialized for worker {pid} on attempt {attempt + 1}")
                     break
                     
                 except Exception as e:
                     if attempt < max_retries - 1:
                         print(f"Failed to initialize Marker OCR for worker {pid} (attempt {attempt + 1}/{max_retries}): {e}")
-                        time.sleep(2 ** attempt)  # Exponential backoff
-                        gc.collect()  # Force garbage collection
+                        time.sleep(2 ** attempt)
+                        gc.collect()
                     else:
                         raise RuntimeError(
                             f"Failed to initialize Marker OCR service for worker {pid} after {max_retries} attempts: {e}"
@@ -119,7 +145,7 @@ class MarkerOCRService(BaseOCRService):
 
     def process_images(self, images: List[Image.Image]) -> List[str]:
         """
-        Process a list of PIL images and return extracted text using marker OCR.
+        Process a list of PIL images and return extracted text using Surya OCR directly.
         
         Args:
             images: List of PIL Image objects to process
@@ -131,52 +157,55 @@ class MarkerOCRService(BaseOCRService):
             return [""]
 
         try:
-            # Convert PIL images to bytes first
-            image_bytes_list = []
-            for i, img in enumerate(images):
+            # Ensure models are initialized
+            if self._surya_models is None:
+                self._ensure_initialized()
+            
+            # Convert images to RGB if needed
+            processed_images = []
+            for img in images:
+                if img.mode not in ('RGB', 'L'):
+                    img = img.convert('RGB')
+                processed_images.append(img)
+            
+            # Use Surya OCR directly on images
+            langs = ["en"]  # Default to English, can be made configurable
+            
+            with self.lock:
                 try:
-                    # Convert PIL Image to bytes
-                    img_byte_arr = io.BytesIO()
-                    # Ensure image is in RGB mode for PDF
-                    if img.mode not in ('RGB', 'L'):
-                        img = img.convert('RGB')
-                    # Save as JPEG for better compression
-                    img.save(img_byte_arr, format='JPEG', quality=95)
-                    img_byte_arr.seek(0)
-                    img_bytes = img_byte_arr.getvalue()
-                    image_bytes_list.append(img_bytes)
+                    predictions = run_ocr(
+                        processed_images,
+                        [langs] * len(processed_images),
+                        self._surya_models['det_model'],
+                        self._surya_models['det_processor'],
+                        self._surya_models['rec_model'],
+                        self._surya_models['rec_processor']
+                    )
+                    
+                    # Extract text from all pages
+                    all_text = []
+                    for page_pred in predictions:
+                        page_text = []
+                        for text_line in page_pred.text_lines:
+                            page_text.append(text_line.text)
+                        all_text.append('\n'.join(page_text))
+                    
+                    # Combine all pages with double newline separator
+                    combined_text = '\n\n'.join(all_text)
+                    
+                    # Clean up
+                    del predictions
+                    del processed_images
+                    torch.cuda.empty_cache() if torch.cuda.is_available() else None
+                    gc.collect()
+                    
+                    return [combined_text]
+                    
                 except Exception as e:
-                    # Try PNG format as fallback
-                    img_byte_arr = io.BytesIO()
-                    img.save(img_byte_arr, format='PNG')
-                    img_byte_arr.seek(0)
-                    image_bytes_list.append(img_byte_arr.getvalue())
-
-            if not image_bytes_list:
-                return [""]
-
-            # Convert all image bytes to a single PDF
-            pdf_bytes = img2pdf.convert(image_bytes_list)
-
-            # Create temporary file for the combined PDF
-            with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as pdf_file:
-                pdf_file.write(pdf_bytes)
-                pdf_path = pdf_file.name
-
-            try:
-                # Process the combined PDF with marker
-                text = self.process_pdf_file(pdf_path)
-                return [text]
-
-            finally:
-                # Clean up temporary PDF file
-                try:
-                    os.unlink(pdf_path)
-                except OSError:
-                    pass
-                
-                # Force garbage collection to free memory
-                gc.collect()
+                    print(f"Error in Surya OCR processing: {e}")
+                    torch.cuda.empty_cache() if torch.cuda.is_available() else None
+                    gc.collect()
+                    return [""]
 
         except Exception as e:
             print(f"Error in process_images: {e}")
