@@ -45,14 +45,14 @@ RUN python3.11 -m pip install --upgrade pip setuptools wheel
 # Copy the requirements file into the container at /app
 COPY ./requirements.txt /app/requirements.txt
 # Install PyTorch 2.7.0 with CUDA 12.8 (required for marker-pdf and Flash Attention)
-RUN pip install --no-cache-dir torch==2.7.0 torchvision --index-url https://download.pytorch.org/whl/cu128
+RUN pip install --no-cache-dir torch==2.7.0 torchvision --extra-index-url https://download.pytorch.org/whl/cu128
 
 # Install Flash Attention 2 compatible with PyTorch 2.7.0
 ENV MAX_JOBS=4
 RUN pip install --no-cache-dir flash-attn --no-build-isolation
 
-# Install remaining packages
-RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt --index-url https://download.pytorch.org/whl/cu128
+# Install remaining packages (use --extra-index-url to access both PyPI and PyTorch repos)
+RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt --extra-index-url https://download.pytorch.org/whl/cu128
 
 # First copy only the files needed for downloading models
 COPY app/services/ocr/base.py /app/app/services/ocr/base.py
