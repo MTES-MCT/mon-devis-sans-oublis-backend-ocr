@@ -56,6 +56,8 @@ class MarkerOCRService(BaseOCRService):
                     # Configure marker to force OCR on all pages
                     config = {
                         "force_ocr": True,  # Force OCR on all pages
+                        "strip_existing_ocr": True,  # Remove existing OCR artifacts and re-OCR
+                        "disable_image_extraction": True,  # Disable image extraction to force OCR on images
                     }
                     config_parser = ConfigParser(config)
                     config_dict = config_parser.generate_config_dict()
