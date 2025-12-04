@@ -1,6 +1,6 @@
-# Use NVIDIA CUDA development image for Flash Attention compilation
-# This image includes nvcc and CUDA development tools required for Flash Attention
-FROM nvidia/cuda:12.1.0-cudnn8-devel-ubuntu22.04
+# Use NVIDIA CUDA 12.8 development image for Flash Attention compilation
+# CUDA 12.8 is required for PyTorch 2.7.0 and Flash Attention compatibility
+FROM nvidia/cuda:12.8.0-cudnn9-devel-ubuntu22.04
 
 # Set the working directory in the container
 WORKDIR /app
@@ -43,15 +43,15 @@ RUN python3.11 -m pip install --upgrade pip setuptools wheel
 
 # Copy the requirements file into the container at /app
 COPY ./requirements.txt /app/requirements.txt
-# Install PyTorch first (required for Flash Attention compilation)
-RUN pip install --no-cache-dir torch==2.5.1 torchvision==0.20.1 --extra-index-url https://download.pytorch.org/whl/cu121
+# Install PyTorch 2.7.0 with CUDA 12.8 (required for marker-pdf and Flash Attention)
+RUN pip install --no-cache-dir torch==2.7.0 torchvision --index-url https://download.pytorch.org/whl/cu128
 
-# Install Flash Attention 2 (marker-pdf removed to avoid dependency conflicts)
+# Install Flash Attention 2 compatible with PyTorch 2.7.0
 ENV MAX_JOBS=4
-RUN pip install --no-cache-dir flash-attn==2.7.2.post1 --no-build-isolation
+RUN pip install --no-cache-dir flash-attn --no-build-isolation
 
 # Install remaining packages
-RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt --extra-index-url https://download.pytorch.org/whl/cu121
+RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt --index-url https://download.pytorch.org/whl/cu128
 
 # First copy only the files needed for downloading models
 COPY app/services/ocr/base.py /app/app/services/ocr/base.py
@@ -66,8 +66,7 @@ COPY app/config.py /app/app/config.py
 COPY download_models.py /app/download_models.py
 
 # Set default environment variables for model download
-# marker service disabled (marker-pdf conflicts with Flash Attention)
-ENV ENABLED_SERVICES="nanonets,olmocr"
+ENV ENABLED_SERVICES="marker,nanonets,olmocr"
 ENV HF_HUB_OFFLINE="0"
 
 # Run the download script to populate the cache

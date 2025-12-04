@@ -1,9 +1,9 @@
-torch==2.5.1
+torch==2.7.0
 gradio
 Pillow
 lxml
 transformers
-torchvision==0.20.1
+torchvision
 accelerate
 hf-transfer
 hf-xet
@@ -14,8 +14,7 @@ python-multipart
 PyMuPDF
 apng
 img2pdf
-# marker-pdf removed due to dependency conflict with Flash Attention
-# (marker-pdf requires torch>=2.7.0 which doesn't exist yet)
-# marker-pdf[full]==1.8.2
+# Install marker-pdf with all dependencies
+marker-pdf[full]==1.8.2
 surya-ocr
 sentry-sdk==2.38.0
