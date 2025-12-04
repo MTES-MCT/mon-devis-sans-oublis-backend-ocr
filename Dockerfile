@@ -1,6 +1,7 @@
 # Use NVIDIA CUDA 12.8 development image for Flash Attention compilation
 # CUDA 12.8 is required for PyTorch 2.7.0 and Flash Attention compatibility
-FROM nvidia/cuda:12.8.0-cudnn9-devel-ubuntu22.04
+FROM nvidia/cuda:12.8.0-cudnn-devel-ubuntu22.04
+
 
 # Set the working directory in the container
 WORKDIR /app
