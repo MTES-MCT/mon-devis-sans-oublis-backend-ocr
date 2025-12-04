@@ -7,7 +7,7 @@ torchvision
 accelerate
 hf-transfer
 hf-xet
-flash-attn==2.8.3
+#flash-attn==2.8.3
 fastapi
 uvicorn
 gunicorn

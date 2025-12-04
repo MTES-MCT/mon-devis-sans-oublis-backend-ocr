@@ -4,7 +4,7 @@ FROM python:3.14-slim
 # Set the working directory in the container
 WORKDIR /app
 
-# Install system dependencies for PDF processing, marker-pdf, and Flash Attention compilation
+# Install system dependencies for PDF processing, marker-pdf, Pillow, and Flash Attention compilation
 RUN apt-get update && apt-get install -y \
     libgl1 \
     libglib2.0-0 \
@@ -19,13 +19,21 @@ RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     ninja-build \
+    zlib1g-dev \
+    libjpeg-dev \
+    libpng-dev \
+    libtiff-dev \
+    libfreetype6-dev \
+    liblcms2-dev \
+    libwebp-dev \
+    libopenjp2-7-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the requirements file into the container at /app
 COPY ./requirements.txt /app/requirements.txt
 
 # Install PyTorch first (required for flash-attn compilation)
-RUN pip install --no-cache-dir torch>=2.0.0 torchvision --extra-index-url https://download.pytorch.org/whl/cu121
+#RUN pip install --no-cache-dir torch>=2.0.0 torchvision --extra-index-url https://download.pytorch.org/whl/cu121
 
 # Install remaining packages including flash-attn (which requires torch during build)
 RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt --extra-index-url https://download.pytorch.org/whl/cu121
@@ -62,4 +70,4 @@ ENV PORT=80
 ENV HOST=0.0.0.0
 
 # Run with Gunicorn for production, with fallback to uvicorn for development
-CMD ["sh", "-c", "if [ \"${WORKERS:-1}\" = \"1\" ]; then uvicorn app.main:app --host ${HOST:-0.0.0.0} --port ${PORT:-80}; else gunicorn app.main:app -c gunicorn_config.py; fi"]
+CMD ["sh", "-c", "if [ \"${WORKERS:-1}\" = \"1\" ]; then uvicorn app.main:app --host ${HOST:-0.0.0.0} --port ${PORT:-80}; else gunicorn app.main:app -c gunicorn_config.py; fi"]% mdso-gpu[erwan]➜  mon-devis-sans-oublis-backend-ocr git:(main) ✗ 
