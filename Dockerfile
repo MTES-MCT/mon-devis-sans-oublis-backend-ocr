@@ -44,12 +44,13 @@ RUN python3.11 -m pip install --upgrade pip setuptools wheel
 # Copy the requirements file into the container at /app
 COPY ./requirements.txt /app/requirements.txt
 # Install PyTorch first (required for Flash Attention compilation)
-RUN pip install --no-cache-dir torch==2.6.0 torchvision --extra-index-url https://download.pytorch.org/whl/cu121
+# Use PyTorch 2.5.1 which is known to be compatible with flash-attn
+RUN pip install --no-cache-dir torch==2.5.1 torchvision==0.20.1 --extra-index-url https://download.pytorch.org/whl/cu121
 
 # Install Flash Attention 2 (now possible with CUDA devel image)
 # Set MAX_JOBS to control parallel compilation (prevent OOM during build)
 ENV MAX_JOBS=4
-RUN pip install --no-cache-dir flash-attn --no-build-isolation
+RUN pip install --no-cache-dir flash-attn==2.7.2.post1 --no-build-isolation
 
 # Install remaining packages
 RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt --extra-index-url https://download.pytorch.org/whl/cu121

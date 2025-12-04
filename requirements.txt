@@ -1,9 +1,9 @@
-torch>=2.0.0
+torch==2.5.1
 gradio
 Pillow
 lxml
 transformers
-torchvision
+torchvision==0.20.1
 accelerate
 hf-transfer
 hf-xet
