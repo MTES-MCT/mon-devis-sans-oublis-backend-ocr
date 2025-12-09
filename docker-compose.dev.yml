@@ -9,87 +9,87 @@ volumes:
     driver: local
 
 services:
-  # 1. STARTS FIRST
-  nanonets-vllm:
-    image: vllm/vllm-openai:latest
-    container_name: nanonets-vllm-dev
-    runtime: nvidia
-    environment:
-      - HF_TOKEN=${HF_TOKEN}
-      - NVIDIA_VISIBLE_DEVICES=0
-    volumes:
-      - huggingface_cache:/root/.cache/huggingface
-    # 0.25 * 44GB = 11GB (Needs more space as it is 3B params)
-    command: >
-      --model nanonets/Nanonets-OCR2-3B
-      --quantization bitsandbytes
-      --load-format bitsandbytes
-      --max-model-len 3072
-      --enforce-eager
-      --mm-processor-cache-gb 0
-      --gpu-memory-utilization 0.25
-      --host 0.0.0.0
-      --port 8000
-    shm_size: '4gb'
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-    # Strict healthcheck to ensure it is fully loaded before next service starts
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 20
-      start_period: 30s
-    restart: unless-stopped
-    networks:
-      - ocr-network
+  # # 1. STARTS FIRST
+  # nanonets-vllm:
+  #   image: vllm/vllm-openai:latest
+  #   container_name: nanonets-vllm-dev
+  #   runtime: nvidia
+  #   environment:
+  #     - HF_TOKEN=${HF_TOKEN}
+  #     - NVIDIA_VISIBLE_DEVICES=0
+  #   volumes:
+  #     - huggingface_cache:/root/.cache/huggingface
+  #   # 0.25 * 44GB = 11GB (Needs more space as it is 3B params)
+  #   command: >
+  #     --model nanonets/Nanonets-OCR2-3B
+  #     --quantization bitsandbytes
+  #     --load-format bitsandbytes
+  #     --max-model-len 3072
+  #     --enforce-eager
+  #     --mm-processor-cache-gb 0
+  #     --gpu-memory-utilization 0.25
+  #     --host 0.0.0.0
+  #     --port 8000
+  #   shm_size: '4gb'
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]
+  #   # Strict healthcheck to ensure it is fully loaded before next service starts
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 20
+  #     start_period: 30s
+  #   restart: unless-stopped
+  #   networks:
+  #     - ocr-network
 
-  # 2. STARTS SECOND (Waits for Nanonets)
-  deepseek-vllm:
-    image: vllm/vllm-openai:latest
-    container_name: deepseek-vllm-dev
-    runtime: nvidia
-    environment:
-      - HF_TOKEN=${HF_TOKEN}
-      - NVIDIA_VISIBLE_DEVICES=0
-    volumes:
-      - huggingface_cache:/root/.cache/huggingface
-    # 0.2 * 44GB = 8.8GB (DeepSeek OCR is usually smaller, ~1.3B)
-    command: >
-      --model deepseek-ai/DeepSeek-OCR
-      --logits_processors vllm.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor
-      --no-enable-prefix-caching
-      --mm-processor-cache-gb 0
-      --max-model-len 3072
-      --enforce-eager
-      --gpu-memory-utilization 0.2
-      --host 0.0.0.0
-      --port 8000
-    shm_size: '4gb'
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 20
-      start_period: 30s
-    depends_on:
-      nanonets-vllm:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - ocr-network
+  # # 2. STARTS SECOND (Waits for Nanonets)
+  # deepseek-vllm:
+  #   image: vllm/vllm-openai:latest
+  #   container_name: deepseek-vllm-dev
+  #   runtime: nvidia
+  #   environment:
+  #     - HF_TOKEN=${HF_TOKEN}
+  #     - NVIDIA_VISIBLE_DEVICES=0
+  #   volumes:
+  #     - huggingface_cache:/root/.cache/huggingface
+  #   # 0.2 * 44GB = 8.8GB (DeepSeek OCR is usually smaller, ~1.3B)
+  #   command: >
+  #     --model deepseek-ai/DeepSeek-OCR
+  #     --logits_processors vllm.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor
+  #     --no-enable-prefix-caching
+  #     --mm-processor-cache-gb 0
+  #     --max-model-len 3072
+  #     --enforce-eager
+  #     --gpu-memory-utilization 0.2
+  #     --host 0.0.0.0
+  #     --port 8000
+  #   shm_size: '4gb'
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 20
+  #     start_period: 30s
+  #   depends_on:
+  #     nanonets-vllm:
+  #       condition: service_healthy
+  #   restart: unless-stopped
+  #   networks:
+  #     - ocr-network
 
   # 3. STARTS THIRD (Waits for DeepSeek)
   hunyuan-vllm:
@@ -106,9 +106,9 @@ services:
       --model tencent/HunyuanOCR
       --no-enable-prefix-caching
       --mm-processor-cache-gb 0
-      --max-model-len 3072
-      --enforce-eager
-      --gpu-memory-utilization 0.2
+      --max-model-len 4096
+      --dtype auto
+      --gpu-memory-utilization 0.75
       --host 0.0.0.0
       --port 8000
     shm_size: '4gb'
@@ -125,9 +125,9 @@ services:
       timeout: 5s
       retries: 20
       start_period: 30s
-    depends_on:
-      deepseek-vllm:
-        condition: service_healthy
+    # depends_on:
+    #   deepseek-vllm:
+    #     condition: service_healthy
     restart: unless-stopped
     networks:
       - ocr-network
@@ -160,10 +160,10 @@ services:
       - huggingface_cache:/root/.cache/huggingface
       - ./temp:/tmp
     depends_on:
-      nanonets-vllm:
-        condition: service_healthy
-      deepseek-vllm:
-        condition: service_healthy
+      # nanonets-vllm:
+      #   condition: service_healthy
+      # deepseek-vllm:
+      #   condition: service_healthy
       hunyuan-vllm:
         condition: service_healthy
     networks:
