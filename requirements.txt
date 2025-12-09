@@ -19,3 +19,5 @@ img2pdf
 marker-pdf[full]==1.10.1
 surya-ocr
 sentry-sdk==2.47.0
+openai>=1.0.0
+httpx>=0.24.0

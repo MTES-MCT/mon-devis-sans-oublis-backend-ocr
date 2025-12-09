@@ -10,9 +10,20 @@ class Config:
     
     # Service Configuration
     ENABLED_SERVICES: List[str] = os.getenv(
-        "ENABLED_SERVICES", 
-        "marker,nanonets,olmocr"  # Default: all services enabled
+        "ENABLED_SERVICES",
+        "marker,nanonets,deepseek-ocr,hunyuan-ocr"  # Default: all services enabled
     ).split(",")
+    
+    # VLLM Endpoints
+    NANONETS_ENDPOINT: str = os.getenv("NANONETS_ENDPOINT", "http://nanonets-vllm:8000/v1")
+    DEEPSEEK_ENDPOINT: str = os.getenv("DEEPSEEK_ENDPOINT", "http://deepseek-vllm:8000/v1")
+    HUNYUAN_ENDPOINT: str = os.getenv("HUNYUAN_ENDPOINT", "http://hunyuan-vllm:8000/v1")
+    
+    # Concurrency Control
+    MAX_CONCURRENT_OCR_REQUESTS: int = int(os.getenv("MAX_CONCURRENT_OCR_REQUESTS", "3"))
+    
+    # VLLM Health Check Timeout
+    VLLM_HEALTH_TIMEOUT: int = int(os.getenv("VLLM_HEALTH_TIMEOUT", "30"))
     
     # Worker Configuration
     WORKERS: int = int(os.getenv("WORKERS", "1"))
@@ -43,5 +54,15 @@ class Config:
     def is_service_enabled(cls, service_name: str) -> bool:
         """Check if a specific service is enabled"""
         return service_name in cls.get_enabled_services()
+    
+    @classmethod
+    def get_vllm_endpoint(cls, service_name: str) -> Optional[str]:
+        """Get VLLM endpoint for a service"""
+        endpoints = {
+            "nanonets": cls.NANONETS_ENDPOINT,
+            "deepseek-ocr": cls.DEEPSEEK_ENDPOINT,
+            "hunyuan-ocr": cls.HUNYUAN_ENDPOINT,
+        }
+        return endpoints.get(service_name)
 
 config = Config()

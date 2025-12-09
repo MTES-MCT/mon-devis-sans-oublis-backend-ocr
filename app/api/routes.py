@@ -2,6 +2,7 @@ from fastapi import APIRouter, File, UploadFile, Depends, HTTPException, status
 from app.services.ocr import get_service, OCR_SERVICES
 from app.models.ocr import OCRResponse
 from app.services.ocr.base import BaseOCRService
+from app.services.ocr.vllm_base import VLLMOCRService
 from app.exceptions import (
     OCRException,
     InvalidFileFormatError,
@@ -20,6 +21,7 @@ import torch
 import tempfile
 import uuid
 import logging
+import asyncio
 from fastapi.concurrency import run_in_threadpool
 from apng import APNG
 from sentry_sdk import logger as sentry_logger
@@ -230,14 +232,14 @@ async def ocr(
     ocr_service: BaseOCRService = Depends(get_ocr_service),
 ):
     """
-    OCR endpoint with enhanced error handling and guaranteed file cleanup.
+    OCR endpoint with enhanced error handling and async batch processing.
     
-    No files are stored persistently - all processing is done in memory
-    or with temporary files that are immediately deleted.
+    Supports both sync (marker) and async (VLLM) services.
+    No files are stored persistently - all processing is done in memory.
     """
     import sentry_sdk
     
-    # Track file info for monitoring (no actual storage)
+    # Track file info for monitoring
     file_info = {
         "filename": file.filename,
         "content_type": file.content_type,
@@ -251,62 +253,78 @@ async def ocr(
     
     images = None
     try:
-        # Convert file to images with proper error handling
-        # All files are temporarily processed and immediately deleted
+        # Convert file to images
         images = await run_in_threadpool(file_to_images, file)
         
-        # Process images with OCR service
-        try:
-            results = await run_in_threadpool(ocr_service.process_images, images)
-        except torch.cuda.OutOfMemoryError:
-            # Clear GPU memory and retry once
-            sentry_logger.warning(
-                'GPU out of memory, attempting retry',
-                attributes={
-                    'ocr.service': service_name,
-                    'retry.attempt': 1
-                }
-            )
-            torch.cuda.empty_cache()
-            gc.collect()
-            
+        # Process based on service type
+        if isinstance(ocr_service, VLLMOCRService):
+            # VLLM services: async batch processing
+            try:
+                results = await ocr_service.process_images_async(images)
+            except Exception as e:
+                sentry_logger.error(
+                    'VLLM OCR processing failed',
+                    attributes={
+                        'ocr.service': service_name,
+                        'error.type': type(e).__name__,
+                        'error.message': str(e)
+                    }
+                )
+                raise OCRProcessingError(
+                    service_name=service_name,
+                    error_detail=str(e)
+                )
+        else:
+            # Non-VLLM services (marker): sync processing with threadpool
             try:
                 results = await run_in_threadpool(ocr_service.process_images, images)
             except torch.cuda.OutOfMemoryError:
-                # If it fails again, raise custom exception
-                sentry_logger.error(
-                    'GPU out of memory after retry',
+                # Clear GPU memory and retry once
+                sentry_logger.warning(
+                    'GPU out of memory, attempting retry',
                     attributes={
                         'ocr.service': service_name,
-                        'retry.attempted': True,
-                        'retry.success': False
+                        'retry.attempt': 1
                     }
                 )
-                raise GPUMemoryError(service_name=service_name, retry_attempted=True)
-                
-        except Exception as e:
-            sentry_logger.error(
-                'OCR processing failed',
-                attributes={
-                    'ocr.service': service_name,
-                    'error.type': type(e).__name__,
-                    'error.message': str(e)
-                }
-            )
-            # Clear GPU memory on any error
-            if torch.cuda.is_available():
                 torch.cuda.empty_cache()
-            gc.collect()
-            
-            raise OCRProcessingError(
-                service_name=service_name,
-                error_detail=str(e)
-            )
+                gc.collect()
+                
+                try:
+                    results = await run_in_threadpool(ocr_service.process_images, images)
+                except torch.cuda.OutOfMemoryError:
+                    sentry_logger.error(
+                        'GPU out of memory after retry',
+                        attributes={
+                            'ocr.service': service_name,
+                            'retry.attempted': True,
+                            'retry.success': False
+                        }
+                    )
+                    raise GPUMemoryError(service_name=service_name, retry_attempted=True)
+            except Exception as e:
+                sentry_logger.error(
+                    'OCR processing failed',
+                    attributes={
+                        'ocr.service': service_name,
+                        'error.type': type(e).__name__,
+                        'error.message': str(e)
+                    }
+                )
+                # Clear GPU memory on any error
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                gc.collect()
+                
+                raise OCRProcessingError(
+                    service_name=service_name,
+                    error_detail=str(e)
+                )
         
         # Join the text from all pages/images
         full_text = "\n\n--- Page Break ---\n\n".join(results)
         
-        # Log successful processing (no file storage)
+        # Log successful processing
         logger.info(f"Successfully processed {file.filename} with {service_name}")
         
         return OCRResponse(text=full_text)
@@ -314,17 +332,15 @@ async def ocr(
     finally:
         # Ensure complete memory cleanup
         if images:
-            # Clear all image references
             for img in images:
                 if hasattr(img, 'close'):
                     img.close()
             del images
         
-        # Force garbage collection
         gc.collect()
         
-        # Clear GPU memory
-        if torch.cuda.is_available():
+        # Clear GPU memory for non-VLLM services
+        if not isinstance(ocr_service, VLLMOCRService) and torch.cuda.is_available():
             torch.cuda.empty_cache()
 
 @router.get("/services")

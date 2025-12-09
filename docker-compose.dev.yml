@@ -1,7 +1,16 @@
 version: '3.8'
 
+networks:
+  ocr-network:
+    driver: bridge
+
+volumes:
+  huggingface_cache:
+    driver: local
+
 services:
-  ocr-backend-dev:
+  # Main Backend API
+  api:
     build:
       context: .
       dockerfile: Dockerfile
@@ -10,54 +19,59 @@ services:
     env_file:
       - .env
     environment:
-      # API Security (for development, can be simple)
+      # API Security
       - API_KEY=${API_KEY:-dev-api-key}
       - SENTRY_DNS=${SENTRY_DNS}
       
-      # Enable all services for development
-      - ENABLED_SERVICES=marker,nanonets,olmocr
+      # Enabled Services
+      - ENABLED_SERVICES=${ENABLED_SERVICES:-marker,nanonets,deepseek-ocr,hunyuan-ocr}
       
-      # Single worker for development (uses uvicorn directly)
+      # VLLM Endpoints (internal Docker network)
+      - NANONETS_ENDPOINT=http://nanonets-vllm:8000/v1
+      - DEEPSEEK_ENDPOINT=http://deepseek-vllm:8000/v1
+      - HUNYUAN_ENDPOINT=http://hunyuan-vllm:8000/v1
+      
+      # Concurrency Control
+      - MAX_CONCURRENT_OCR_REQUESTS=3
+      
+      # Worker Settings
       - WORKERS=1
-      
-      # Development settings
       - LOG_LEVEL=debug
       - ACCESS_LOG=true
-      
-      # Server configuration
       - HOST=0.0.0.0
       - PORT=80
       
-      # Hugging Face cache
+      # Storage
       - HF_HOME=/root/.cache/huggingface
-      
-      # GPU support
       - CUDA_VISIBLE_DEVICES=0
-      
+    
     ports:
       - "8001:80"
     
     volumes:
-      # Mount source code for hot reload
       - ./app:/app/app
       - ./gunicorn_config.py:/app/gunicorn_config.py
-      
-      # Persist model cache
       - huggingface_cache:/root/.cache/huggingface
-      
-      # Temporary files
       - ./temp:/tmp
+    
+    depends_on:
+      nanonets-vllm:
+        condition: service_healthy
+      deepseek-vllm:
+        condition: service_healthy
+      hunyuan-vllm:
+        condition: service_healthy
     
     deploy:
       resources:
-        limits:
-          memory: 8G
         reservations:
-          memory: 4G
           devices:
             - driver: nvidia
-              count: all
+              count: 1
               capabilities: [gpu]
+    
+    networks:
+      - ocr-network
     
     restart: unless-stopped
     
@@ -70,11 +84,111 @@ services:
     
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "80", "--reload"]
 
-volumes:
-  huggingface_cache:
-    driver: local
+  # VLLM Service: Nanonets OCR
+  nanonets-vllm:
+    image: vllm/vllm-openai:latest
+    container_name: nanonets-vllm-dev
+    runtime: nvidia
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+      - NVIDIA_VISIBLE_DEVICES=0
+    volumes:
+      - huggingface_cache:/root/.cache/huggingface
+    command: >
+      --model nanonets/Nanonets-OCR2-3B
+      --quantization bitsandbytes
+      --load-format bitsandbytes
+      --max-model-len 4096
+      --gpu-memory-utilization 0.2
+      --host 0.0.0.0
+      --port 8000
+    shm_size: '2gb'
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    restart: unless-stopped
+    networks:
+      - ocr-network
 
-networks:
-  default:
-    name: ocr-network-dev
-    driver: bridge
+  # VLLM Service: DeepSeek OCR
+  deepseek-vllm:
+    image: vllm/vllm-openai:latest
+    container_name: deepseek-vllm-dev
+    runtime: nvidia
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+      - NVIDIA_VISIBLE_DEVICES=0
+    volumes:
+      - huggingface_cache:/root/.cache/huggingface
+    command: >
+      --model deepseek-ai/DeepSeek-OCR
+      --logits_processors vllm.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor
+      --no-enable-prefix-caching
+      --mm-processor-cache-gb 0
+      --max-model-len 4096
+      --gpu-memory-utilization 0.3
+      --host 0.0.0.0
+      --port 8000
+    shm_size: '2gb'
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    restart: unless-stopped
+    networks:
+      - ocr-network
+
+  # VLLM Service: Hunyuan OCR
+  hunyuan-vllm:
+    image: vllm/vllm-openai:latest
+    container_name: hunyuan-vllm-dev
+    runtime: nvidia
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+      - NVIDIA_VISIBLE_DEVICES=0
+    volumes:
+      - huggingface_cache:/root/.cache/huggingface
+    command: >
+      --model tencent/HunyuanOCR
+      --no-enable-prefix-caching
+      --mm-processor-cache-gb 0
+      --max-model-len 4096
+      --gpu-memory-utilization 0.15
+      --host 0.0.0.0
+      --port 8000
+    shm_size: '2gb'
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    restart: unless-stopped
+    networks:
+      - ocr-network
