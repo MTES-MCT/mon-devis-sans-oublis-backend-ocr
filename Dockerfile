@@ -39,10 +39,11 @@ COPY ./requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt --extra-index-url https://download.pytorch.org/whl/cu121
 
 # First copy only the files needed for downloading models
+# Only marker models need to be downloaded in the backend
+# VLLM models are loaded in separate containers
 COPY app/services/ocr/base.py /app/app/services/ocr/base.py
-COPY app/services/ocr/nanonets.py /app/app/services/ocr/nanonets.py
-COPY app/services/ocr/olmocr.py /app/app/services/ocr/olmocr.py
-# Don't copy marker.py yet - it will be copied with the rest of the app
+COPY app/services/ocr/vllm_base.py /app/app/services/ocr/vllm_base.py
+COPY app/services/ocr/marker.py /app/app/services/ocr/marker.py
 COPY app/services/ocr/__init__.py /app/app/services/ocr/__init__.py
 
 COPY app/__init__.py /app/app/__init__.py
@@ -51,7 +52,8 @@ COPY app/config.py /app/app/config.py
 COPY download_models.py /app/download_models.py
 
 # Set default environment variables for model download
-ENV ENABLED_SERVICES="marker,nanonets,olmocr"
+# Only download marker models - VLLM models are loaded in separate containers
+ENV ENABLED_SERVICES="marker"
 ENV HF_HUB_OFFLINE="0"
 
 # Run the download script to populate the cache
