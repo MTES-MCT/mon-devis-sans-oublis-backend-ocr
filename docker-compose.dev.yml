@@ -24,7 +24,7 @@ services:
       --model nanonets/Nanonets-OCR2-3B
       --quantization bitsandbytes
       --load-format bitsandbytes
-      --max-model-len 2048
+      --max-model-len 3072
       --enforce-eager
       --mm-processor-cache-gb 0
       --gpu-memory-utilization 0.25
@@ -65,7 +65,7 @@ services:
       --logits_processors vllm.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor
       --no-enable-prefix-caching
       --mm-processor-cache-gb 0
-      --max-model-len 2048
+      --max-model-len 3072
       --enforce-eager
       --gpu-memory-utilization 0.2
       --host 0.0.0.0
@@ -106,7 +106,7 @@ services:
       --model tencent/HunyuanOCR
       --no-enable-prefix-caching
       --mm-processor-cache-gb 0
-      --max-model-len 2048
+      --max-model-len 3072
       --enforce-eager
       --gpu-memory-utilization 0.2
       --host 0.0.0.0

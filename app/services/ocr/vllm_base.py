@@ -112,7 +112,7 @@ class VLLMOCRService(BaseOCRService):
                 response = await self.client.chat.completions.create(
                     model=self._model_name,
                     messages=messages,
-                    max_tokens=2500,
+                    max_tokens=2200,
                     temperature=0,  # Deterministic output for OCR
                 )
                 
