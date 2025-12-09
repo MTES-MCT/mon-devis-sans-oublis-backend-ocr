@@ -99,7 +99,7 @@ services:
       --quantization bitsandbytes
       --load-format bitsandbytes
       --max-model-len 4096
-      --gpu-memory-utilization 0.2
+      --gpu-memory-utilization 0.1
       --host 0.0.0.0
       --port 8000
     shm_size: '2gb'
@@ -136,7 +136,7 @@ services:
       --no-enable-prefix-caching
       --mm-processor-cache-gb 0
       --max-model-len 4096
-      --gpu-memory-utilization 0.3
+      --gpu-memory-utilization 0.15
       --host 0.0.0.0
       --port 8000
     shm_size: '2gb'
@@ -172,7 +172,7 @@ services:
       --no-enable-prefix-caching
       --mm-processor-cache-gb 0
       --max-model-len 4096
-      --gpu-memory-utilization 0.15
+      --gpu-memory-utilization 0.1
       --host 0.0.0.0
       --port 8000
     shm_size: '2gb'
