@@ -106,7 +106,7 @@ services:
       --model tencent/HunyuanOCR
       --no-enable-prefix-caching
       --mm-processor-cache-gb 0
-      --max-model-len 4096
+      --max-model-len 16384
       --dtype auto
       --gpu-memory-utilization 0.75
       --host 0.0.0.0
