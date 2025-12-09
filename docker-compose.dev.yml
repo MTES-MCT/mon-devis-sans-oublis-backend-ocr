@@ -9,7 +9,6 @@ volumes:
     driver: local
 
 services:
-  # Main Backend API
   api:
     build:
       context: .
@@ -19,72 +18,45 @@ services:
     env_file:
       - .env
     environment:
-      # API Security
       - API_KEY=${API_KEY:-dev-api-key}
       - SENTRY_DNS=${SENTRY_DNS}
-      
-      # Enabled Services
       - ENABLED_SERVICES=${ENABLED_SERVICES:-marker,nanonets,deepseek-ocr,hunyuan-ocr}
-      
-      # VLLM Endpoints (internal Docker network)
       - NANONETS_ENDPOINT=http://nanonets-vllm:8000/v1
       - DEEPSEEK_ENDPOINT=http://deepseek-vllm:8000/v1
       - HUNYUAN_ENDPOINT=http://hunyuan-vllm:8000/v1
-      
-      # Concurrency Control
       - MAX_CONCURRENT_OCR_REQUESTS=3
-      
-      # Worker Settings
       - WORKERS=1
       - LOG_LEVEL=debug
       - ACCESS_LOG=true
       - HOST=0.0.0.0
       - PORT=80
-      
-      # Storage
       - HF_HOME=/root/.cache/huggingface
       - CUDA_VISIBLE_DEVICES=0
-    
     ports:
       - "8001:80"
-    
     volumes:
       - ./app:/app/app
       - ./gunicorn_config.py:/app/gunicorn_config.py
       - huggingface_cache:/root/.cache/huggingface
       - ./temp:/tmp
-    
     depends_on:
       nanonets-vllm:
-        condition: service_healthy
+        condition: service_started
       deepseek-vllm:
-        condition: service_healthy
+        condition: service_started
       hunyuan-vllm:
-        condition: service_healthy
-    
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-    
+        condition: service_started
     networks:
       - ocr-network
-    
     restart: unless-stopped
-    
     healthcheck:
       test: ["CMD", "curl", "-f", "-H", "x-api-key: ${API_KEY:-dev-api-key}", "http://localhost/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 60s
-    
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "80", "--reload"]
 
-  # VLLM Service: Nanonets OCR
   nanonets-vllm:
     image: vllm/vllm-openai:latest
     container_name: nanonets-vllm-dev
@@ -98,11 +70,12 @@ services:
       --model nanonets/Nanonets-OCR2-3B
       --quantization bitsandbytes
       --load-format bitsandbytes
-      --max-model-len 4096
-      --gpu-memory-utilization 0.1
+      --max-model-len 2048
+      --enforce-eager
+      --gpu-memory-utilization 0.25
       --host 0.0.0.0
       --port 8000
-    shm_size: '2gb'
+    shm_size: '4gb' # Increased SHM size
     deploy:
       resources:
         reservations:
@@ -120,7 +93,6 @@ services:
     networks:
       - ocr-network
 
-  # VLLM Service: DeepSeek OCR
   deepseek-vllm:
     image: vllm/vllm-openai:latest
     container_name: deepseek-vllm-dev
@@ -135,11 +107,12 @@ services:
       --logits_processors vllm.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor
       --no-enable-prefix-caching
       --mm-processor-cache-gb 0
-      --max-model-len 4096
-      --gpu-memory-utilization 0.15
+      --max-model-len 2048
+      --enforce-eager
+      --gpu-memory-utilization 0.35
       --host 0.0.0.0
       --port 8000
-    shm_size: '2gb'
+    shm_size: '4gb'
     deploy:
       resources:
         reservations:
@@ -157,7 +130,6 @@ services:
     networks:
       - ocr-network
 
-  # VLLM Service: Hunyuan OCR
   hunyuan-vllm:
     image: vllm/vllm-openai:latest
     container_name: hunyuan-vllm-dev
@@ -171,11 +143,12 @@ services:
       --model tencent/HunyuanOCR
       --no-enable-prefix-caching
       --mm-processor-cache-gb 0
-      --max-model-len 4096
-      --gpu-memory-utilization 0.1
+      --max-model-len 2048
+      --enforce-eager
+      --gpu-memory-utilization 0.2
       --host 0.0.0.0
       --port 8000
-    shm_size: '2gb'
+    shm_size: '4gb'
     deploy:
       resources:
         reservations:
