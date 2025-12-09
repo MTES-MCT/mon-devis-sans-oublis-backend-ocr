@@ -81,8 +81,11 @@ class VLLMOCRService(BaseOCRService):
         """
         async with self.semaphore:
             try:
+                logger.info(f"[{self._service_name}] Starting image processing...")
+                
                 # Encode image to base64
                 base64_image = self.encode_image_to_base64(image)
+                logger.debug(f"[{self._service_name}] Image encoded to base64 (size: {len(base64_image)} chars)")
                 
                 # Create message with vision content
                 messages = [
@@ -103,20 +106,27 @@ class VLLMOCRService(BaseOCRService):
                     }
                 ]
                 
+                logger.info(f"[{self._service_name}] Sending request to VLLM endpoint: {self._endpoint}")
+                
                 # Call VLLM via OpenAI API
                 response = await self.client.chat.completions.create(
                     model=self._model_name,
                     messages=messages,
-                    max_tokens=3000,
+                    max_tokens=2500,
                     temperature=0,  # Deterministic output for OCR
                 )
                 
                 # Extract text from response
                 text = response.choices[0].message.content
+                
+                logger.info(f"[{self._service_name}] Successfully received response (length: {len(text) if text else 0} chars)")
+                logger.debug(f"[{self._service_name}] Response text preview: {text[:200] if text else 'empty'}...")
+                
                 return text if text else ""
                 
             except Exception as e:
-                logger.error(f"Error processing image with {self._service_name}: {e}")
+                logger.error(f"[{self._service_name}] Error processing image: {type(e).__name__}: {str(e)}")
+                logger.exception(f"[{self._service_name}] Full traceback:")
                 return ""
     
     async def process_images_async(self, images: List[Image.Image]) -> List[str]:
