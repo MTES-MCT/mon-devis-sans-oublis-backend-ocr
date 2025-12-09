@@ -19,7 +19,6 @@ services:
       - .env
     environment:
       - API_KEY=${API_KEY:-dev-api-key}
-      - SENTRY_DNS=${SENTRY_DNS}
       - ENABLED_SERVICES=${ENABLED_SERVICES:-marker,nanonets,deepseek-ocr,hunyuan-ocr}
       - NANONETS_ENDPOINT=http://nanonets-vllm:8000/v1
       - DEEPSEEK_ENDPOINT=http://deepseek-vllm:8000/v1
@@ -27,16 +26,13 @@ services:
       - MAX_CONCURRENT_OCR_REQUESTS=3
       - WORKERS=1
       - LOG_LEVEL=debug
-      - ACCESS_LOG=true
       - HOST=0.0.0.0
       - PORT=80
       - HF_HOME=/root/.cache/huggingface
-      - CUDA_VISIBLE_DEVICES=0
     ports:
       - "8001:80"
     volumes:
       - ./app:/app/app
-      - ./gunicorn_config.py:/app/gunicorn_config.py
       - huggingface_cache:/root/.cache/huggingface
       - ./temp:/tmp
     depends_on:
@@ -49,12 +45,6 @@ services:
     networks:
       - ocr-network
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "-H", "x-api-key: ${API_KEY:-dev-api-key}", "http://localhost/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "80", "--reload"]
 
   nanonets-vllm:
@@ -66,16 +56,18 @@ services:
       - NVIDIA_VISIBLE_DEVICES=0
     volumes:
       - huggingface_cache:/root/.cache/huggingface
+    # UTILIZATION: 0.25 * 44GB = 11GB
     command: >
       --model nanonets/Nanonets-OCR2-3B
       --quantization bitsandbytes
       --load-format bitsandbytes
-      --max-model-len 3072
+      --max-model-len 2048
       --enforce-eager
+      --mm-processor-cache-gb 0
       --gpu-memory-utilization 0.25
       --host 0.0.0.0
       --port 8000
-    shm_size: '4gb' # Increased SHM size
+    shm_size: '4gb'
     deploy:
       resources:
         reservations:
@@ -83,12 +75,6 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 120s
     restart: unless-stopped
     networks:
       - ocr-network
@@ -102,14 +88,15 @@ services:
       - NVIDIA_VISIBLE_DEVICES=0
     volumes:
       - huggingface_cache:/root/.cache/huggingface
+    # UTILIZATION: 0.25 * 44GB = 11GB
     command: >
       --model deepseek-ai/DeepSeek-OCR
       --logits_processors vllm.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor
       --no-enable-prefix-caching
       --mm-processor-cache-gb 0
-      --max-model-len 3072
+      --max-model-len 2048
       --enforce-eager
-      --gpu-memory-utilization 0.35
+      --gpu-memory-utilization 0.25
       --host 0.0.0.0
       --port 8000
     shm_size: '4gb'
@@ -120,12 +107,6 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 120s
     restart: unless-stopped
     networks:
       - ocr-network
@@ -139,13 +120,14 @@ services:
       - NVIDIA_VISIBLE_DEVICES=0
     volumes:
       - huggingface_cache:/root/.cache/huggingface
+    # UTILIZATION: 0.18 * 44GB = 7.9GB
     command: >
       --model tencent/HunyuanOCR
       --no-enable-prefix-caching
       --mm-processor-cache-gb 0
-      --max-model-len 3072
+      --max-model-len 2048
       --enforce-eager
-      --gpu-memory-utilization 0.2
+      --gpu-memory-utilization 0.18
       --host 0.0.0.0
       --port 8000
     shm_size: '4gb'
@@ -156,12 +138,6 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 120s
     restart: unless-stopped
     networks:
       - ocr-network
