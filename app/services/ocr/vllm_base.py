@@ -66,6 +66,7 @@ class VLLMOCRService(BaseOCRService):
     def encode_image_to_base64(image: Image.Image) -> str:
         """
         Encode PIL Image to base64 string for API transmission.
+        Uses JPEG encoding for faster processing and smaller file sizes.
         
         Args:
             image: PIL Image object
@@ -75,17 +76,27 @@ class VLLMOCRService(BaseOCRService):
         """
         buffered = io.BytesIO()
         
-        # Convert to RGB if necessary
-        if image.mode not in ('RGB', 'L'):
+        # Convert to RGB if necessary (JPEG requires RGB)
+        if image.mode != 'RGB':
             image = image.convert('RGB')
         
-        # Save as PNG (DeepSeek might not handle JPEG well)
-        image.save(buffered, format="PNG")
+        # Get encoding settings from config
+        encode_format = config.IMAGE_ENCODE_FORMAT
+        
+        # Save with appropriate format and quality
+        if encode_format == "JPEG":
+            image.save(buffered, format="JPEG", quality=config.IMAGE_ENCODE_QUALITY, optimize=True)
+            mime_type = "image/jpeg"
+        else:
+            # Fallback to PNG if configured
+            image.save(buffered, format="PNG", optimize=True)
+            mime_type = "image/png"
+        
         buffered.seek(0)
         
         # Encode to base64
         img_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
-        return f"data:image/png;base64,{img_str}"
+        return f"data:{mime_type};base64,{img_str}"
     
     async def process_single_image(self, image: Image.Image, retry_count: int = 0) -> str:
         """

@@ -25,6 +25,10 @@ class Config:
     # PDF Processing Configuration
     PDF_DPI: int = int(os.getenv("PDF_DPI", "72"))  # Lower DPI for faster processing, OCR models work well with 72 DPI
     
+    # Image Encoding Configuration
+    IMAGE_ENCODE_QUALITY: int = int(os.getenv("IMAGE_ENCODE_QUALITY", "85"))  # JPEG quality (1-100), 85 is good balance for OCR
+    IMAGE_ENCODE_FORMAT: str = os.getenv("IMAGE_ENCODE_FORMAT", "JPEG")  # Image format for VLLM encoding (JPEG or PNG)
+    
     # VLLM Timeout Configuration
     VLLM_HEALTH_TIMEOUT: int = int(os.getenv("VLLM_HEALTH_TIMEOUT", "30"))
     VLLM_REQUEST_TIMEOUT: int = int(os.getenv("VLLM_REQUEST_TIMEOUT", "300"))  # 5 minutes for OCR processing
