@@ -23,12 +23,20 @@ class VLLMOCRService(BaseOCRService):
     
     This class provides common functionality for services that use VLLM
     with OpenAI-compatible API for vision-based OCR.
+    
+    Subclasses should set:
+    - _service_name: Unique identifier for the service
+    - _model_name: VLLM model name
+    - _endpoint: VLLM API endpoint URL
+    - _system_prompt: Text prompt for OCR (default: "Extract all text from this image.")
+    - _extra_body: Optional dict with VLLM-specific parameters (default: None)
     """
     
     _service_name = "vllm_base"
     _endpoint: Optional[str] = None
     _system_prompt: str = "Extract all text from this image."
     _model_name: str = "default"
+    _extra_body: Optional[dict] = None  # Subclasses can override with model-specific config
     
     def __init__(self):
         """Initialize VLLM service with OpenAI client"""
@@ -127,12 +135,19 @@ class VLLMOCRService(BaseOCRService):
                 
                 # Call VLLM via OpenAI API
                 # Use max_tokens=2096 to match successful test
-                response = await self.client.chat.completions.create(
-                    model=self._model_name,
-                    messages=messages,
-                    max_tokens=2096,
-                    temperature=0.0,  # Deterministic output for OCR (use float to match test)
-                )
+                request_params = {
+                    "model": self._model_name,
+                    "messages": messages,
+                    "max_tokens": 2096,
+                    "temperature": 0.0,  # Deterministic output for OCR
+                }
+                
+                # Add extra_body if provided by subclass
+                if self._extra_body:
+                    request_params["extra_body"] = self._extra_body
+                    logger.debug(f"[{self._service_name}] Using extra_body: {self._extra_body}")
+                
+                response = await self.client.chat.completions.create(**request_params)
                 
                 # Log full response for debugging
                 logger.debug(f"[{self._service_name}] Full response object: {response}")
