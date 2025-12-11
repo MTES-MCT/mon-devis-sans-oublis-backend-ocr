@@ -1,6 +1,7 @@
 from fastapi import APIRouter, File, UploadFile, Depends, HTTPException, status
 from app.services.ocr import get_service, OCR_SERVICES
 from app.models.ocr import OCRResponse
+from app.config import config
 from app.services.ocr.base import BaseOCRService
 from app.services.ocr.vllm_base import VLLMOCRService, VLLMProcessingError
 from app.exceptions import (
@@ -47,17 +48,19 @@ def extract_apng_frames(file_path, output_prefix="frame"):
         extracted_images.append(Image.open(img_bytes_io))
     return extracted_images
 
-def pdf_pages_to_images(pdf_path, dpi=150):
+def pdf_pages_to_images(pdf_path, dpi=None):
     """
     Convert PDF pages to PIL Images
     
     Args:
         pdf_path (str): Path to PDF file
-        dpi (int): Resolution for rendering (default 150)
+        dpi (int): Resolution for rendering (default from config.PDF_DPI)
         
     Returns:
         list: List of PIL Image objects, one per page
     """
+    if dpi is None:
+        dpi = config.PDF_DPI
     doc = None
     try:
         doc = fitz.open(pdf_path)
@@ -134,7 +137,7 @@ def file_to_images(file: UploadFile) -> List[Image.Image]:
             shutil.copyfileobj(file.file, temp_file)
         
         if file_extension == ".pdf":
-            images = pdf_pages_to_images(temp_file_path, dpi=150)
+            images = pdf_pages_to_images(temp_file_path)
         elif file_extension in [".png", ".jpg", ".jpeg", ".bmp", ".gif"]:
             try:
                 if is_apng(temp_file_path):

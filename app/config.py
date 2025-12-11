@@ -22,6 +22,9 @@ class Config:
     # Concurrency Control
     MAX_CONCURRENT_OCR_REQUESTS: int = int(os.getenv("MAX_CONCURRENT_OCR_REQUESTS", "3"))
     
+    # PDF Processing Configuration
+    PDF_DPI: int = int(os.getenv("PDF_DPI", "72"))  # Lower DPI for faster processing, OCR models work well with 72 DPI
+    
     # VLLM Timeout Configuration
     VLLM_HEALTH_TIMEOUT: int = int(os.getenv("VLLM_HEALTH_TIMEOUT", "30"))
     VLLM_REQUEST_TIMEOUT: int = int(os.getenv("VLLM_REQUEST_TIMEOUT", "300"))  # 5 minutes for OCR processing

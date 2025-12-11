@@ -16,7 +16,7 @@ class DeepSeekOCRService(VLLMOCRService):
         
         # Use "Free OCR." prompt as per official documentation
         # Simple prompts work best - complex prompts cause empty responses
-        self._system_prompt = "Free OCR."
+        self._system_prompt = "Convert the document to markdown."
         
         # Configure DeepSeek-specific parameters
         # Based on: https://github.com/deepseek-ai/DeepSeek-OCR-V1
