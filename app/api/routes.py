@@ -2,7 +2,7 @@ from fastapi import APIRouter, File, UploadFile, Depends, HTTPException, status
 from app.services.ocr import get_service, OCR_SERVICES
 from app.models.ocr import OCRResponse
 from app.services.ocr.base import BaseOCRService
-from app.services.ocr.vllm_base import VLLMOCRService
+from app.services.ocr.vllm_base import VLLMOCRService, VLLMProcessingError
 from app.exceptions import (
     OCRException,
     InvalidFileFormatError,
@@ -261,9 +261,22 @@ async def ocr(
             # VLLM services: async batch processing
             try:
                 results = await ocr_service.process_images_async(images)
-            except Exception as e:
+            except VLLMProcessingError as e:
                 sentry_logger.error(
                     'VLLM OCR processing failed',
+                    attributes={
+                        'ocr.service': service_name,
+                        'error.type': 'VLLMProcessingError',
+                        'error.message': str(e)
+                    }
+                )
+                raise OCRProcessingError(
+                    service_name=service_name,
+                    error_detail=f"VLLM processing failed: {str(e)}"
+                )
+            except Exception as e:
+                sentry_logger.error(
+                    'Unexpected VLLM error',
                     attributes={
                         'ocr.service': service_name,
                         'error.type': type(e).__name__,
@@ -272,7 +285,7 @@ async def ocr(
                 )
                 raise OCRProcessingError(
                     service_name=service_name,
-                    error_detail=str(e)
+                    error_detail=f"Unexpected error: {str(e)}"
                 )
         else:
             # Non-VLLM services (marker): sync processing with threadpool

@@ -22,8 +22,10 @@ class Config:
     # Concurrency Control
     MAX_CONCURRENT_OCR_REQUESTS: int = int(os.getenv("MAX_CONCURRENT_OCR_REQUESTS", "3"))
     
-    # VLLM Health Check Timeout
+    # VLLM Timeout Configuration
     VLLM_HEALTH_TIMEOUT: int = int(os.getenv("VLLM_HEALTH_TIMEOUT", "30"))
+    VLLM_REQUEST_TIMEOUT: int = int(os.getenv("VLLM_REQUEST_TIMEOUT", "300"))  # 5 minutes for OCR processing
+    VLLM_MAX_TOKENS: int = int(os.getenv("VLLM_MAX_TOKENS", "4096"))  # Maximum tokens for response
     
     # Worker Configuration
     WORKERS: int = int(os.getenv("WORKERS", "1"))

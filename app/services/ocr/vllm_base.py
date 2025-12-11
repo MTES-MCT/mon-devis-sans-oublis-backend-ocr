@@ -5,11 +5,16 @@ import logging
 from typing import List, Optional
 from abc import abstractmethod
 from PIL import Image
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, APIError, APITimeoutError
 from .base import BaseOCRService
 from app.config import config
 
 logger = logging.getLogger(__name__)
+
+
+class VLLMProcessingError(Exception):
+    """Exception raised when VLLM processing fails"""
+    pass
 
 
 class VLLMOCRService(BaseOCRService):
@@ -36,11 +41,15 @@ class VLLMOCRService(BaseOCRService):
         self.client = AsyncOpenAI(
             base_url=self._endpoint,
             api_key="EMPTY",  # VLLM doesn't require API key
-            timeout=config.VLLM_HEALTH_TIMEOUT,
+            timeout=config.VLLM_REQUEST_TIMEOUT,
         )
         
         # Semaphore for concurrent request control
         self.semaphore = asyncio.Semaphore(config.MAX_CONCURRENT_OCR_REQUESTS)
+        
+        # Retry configuration
+        self.max_retries = 3
+        self.retry_delay = 1.0  # Initial delay in seconds
         
         logger.info(f"Initialized {self._service_name} with endpoint {self._endpoint}")
     
@@ -69,19 +78,23 @@ class VLLMOCRService(BaseOCRService):
         img_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
         return f"data:image/jpeg;base64,{img_str}"
     
-    async def process_single_image(self, image: Image.Image) -> str:
+    async def process_single_image(self, image: Image.Image, retry_count: int = 0) -> str:
         """
-        Process a single image asynchronously using VLLM.
+        Process a single image asynchronously using VLLM with retry logic.
         
         Args:
             image: PIL Image object
+            retry_count: Current retry attempt (internal use)
             
         Returns:
             Extracted text from the image
+            
+        Raises:
+            VLLMProcessingError: If processing fails after all retries
         """
         async with self.semaphore:
             try:
-                logger.info(f"[{self._service_name}] Starting image processing...")
+                logger.info(f"[{self._service_name}] Starting image processing (attempt {retry_count + 1}/{self.max_retries})...")
                 
                 # Encode image to base64
                 base64_image = self.encode_image_to_base64(image)
@@ -112,22 +125,61 @@ class VLLMOCRService(BaseOCRService):
                 response = await self.client.chat.completions.create(
                     model=self._model_name,
                     messages=messages,
-                    max_tokens=2200,
+                    max_tokens=config.VLLM_MAX_TOKENS,
                     temperature=0,  # Deterministic output for OCR
                 )
                 
                 # Extract text from response
                 text = response.choices[0].message.content
                 
-                logger.info(f"[{self._service_name}] Successfully received response (length: {len(text) if text else 0} chars)")
-                logger.debug(f"[{self._service_name}] Response text preview: {text[:200] if text else 'empty'}...")
+                if not text:
+                    logger.warning(f"[{self._service_name}] Received empty response from VLLM")
+                    # If we get an empty response, raise an error to trigger retry
+                    raise VLLMProcessingError("Empty response from VLLM")
                 
-                return text if text else ""
+                logger.info(f"[{self._service_name}] Successfully received response (length: {len(text)} chars)")
+                logger.debug(f"[{self._service_name}] Response text preview: {text[:200]}...")
+                
+                return text
+                
+            except APITimeoutError as e:
+                logger.error(f"[{self._service_name}] Timeout error (attempt {retry_count + 1}/{self.max_retries}): {str(e)}")
+                
+                if retry_count < self.max_retries - 1:
+                    delay = self.retry_delay * (2 ** retry_count)  # Exponential backoff
+                    logger.info(f"[{self._service_name}] Retrying after {delay}s...")
+                    await asyncio.sleep(delay)
+                    return await self.process_single_image(image, retry_count + 1)
+                
+                raise VLLMProcessingError(f"Timeout after {self.max_retries} attempts: {str(e)}")
+                
+            except APIError as e:
+                logger.error(f"[{self._service_name}] API error (attempt {retry_count + 1}/{self.max_retries}): {str(e)}")
+                
+                # Only retry on 5xx errors (server errors)
+                if hasattr(e, 'status_code') and 500 <= e.status_code < 600 and retry_count < self.max_retries - 1:
+                    delay = self.retry_delay * (2 ** retry_count)
+                    logger.info(f"[{self._service_name}] Retrying after {delay}s...")
+                    await asyncio.sleep(delay)
+                    return await self.process_single_image(image, retry_count + 1)
+                
+                raise VLLMProcessingError(f"API error: {str(e)}")
+                
+            except VLLMProcessingError as e:
+                # Already a VLLMProcessingError, check if we should retry
+                if retry_count < self.max_retries - 1:
+                    delay = self.retry_delay * (2 ** retry_count)
+                    logger.info(f"[{self._service_name}] Retrying after {delay}s...")
+                    await asyncio.sleep(delay)
+                    return await self.process_single_image(image, retry_count + 1)
+                
+                # Re-raise the error after all retries exhausted
+                raise
                 
             except Exception as e:
-                logger.error(f"[{self._service_name}] Error processing image: {type(e).__name__}: {str(e)}")
+                logger.error(f"[{self._service_name}] Unexpected error processing image: {type(e).__name__}: {str(e)}")
                 logger.exception(f"[{self._service_name}] Full traceback:")
-                return ""
+                raise VLLMProcessingError(f"Unexpected error: {type(e).__name__}: {str(e)}")
     
     async def process_images_async(self, images: List[Image.Image]) -> List[str]:
         """
@@ -138,24 +190,18 @@ class VLLMOCRService(BaseOCRService):
             
         Returns:
             List of extracted text strings, one per image
+            
+        Raises:
+            VLLMProcessingError: If any image fails to process after retries
         """
         if not images:
             return []
         
         # Process all images concurrently with semaphore control
         tasks = [self.process_single_image(img) for img in images]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        results = await asyncio.gather(*tasks, return_exceptions=False)  # Don't catch exceptions
         
-        # Handle any exceptions in results
-        processed_results = []
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                logger.error(f"Error processing image {i} with {self._service_name}: {result}")
-                processed_results.append("")
-            else:
-                processed_results.append(result)
-        
-        return processed_results
+        return results
     
     def process_images(self, images: List[Image.Image]) -> List[str]:
         """
