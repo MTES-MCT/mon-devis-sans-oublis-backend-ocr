@@ -120,6 +120,7 @@ class VLLMOCRService(BaseOCRService):
                 ]
                 
                 logger.info(f"[{self._service_name}] Sending request to VLLM endpoint: {self._endpoint}")
+                logger.debug(f"[{self._service_name}] Request: model={self._model_name}, max_tokens={config.VLLM_MAX_TOKENS}, temperature=0")
                 
                 # Call VLLM via OpenAI API
                 response = await self.client.chat.completions.create(
@@ -129,11 +130,24 @@ class VLLMOCRService(BaseOCRService):
                     temperature=0,  # Deterministic output for OCR
                 )
                 
+                # Log full response for debugging
+                logger.debug(f"[{self._service_name}] Full response object: {response}")
+                logger.debug(f"[{self._service_name}] Response model: {response.model}")
+                logger.debug(f"[{self._service_name}] Choices count: {len(response.choices)}")
+                
+                if response.choices and len(response.choices) > 0:
+                    choice = response.choices[0]
+                    logger.debug(f"[{self._service_name}] Finish reason: {choice.finish_reason}")
+                    logger.debug(f"[{self._service_name}] Message: {choice.message}")
+                    logger.debug(f"[{self._service_name}] Content type: {type(choice.message.content)}")
+                    logger.debug(f"[{self._service_name}] Content value: {repr(choice.message.content)}")
+                
                 # Extract text from response
                 text = response.choices[0].message.content
                 
                 if not text:
                     logger.warning(f"[{self._service_name}] Received empty response from VLLM")
+                    logger.warning(f"[{self._service_name}] Full response: {response.model_dump_json()}")
                     # If we get an empty response, raise an error to trigger retry
                     raise VLLMProcessingError("Empty response from VLLM")
                 
