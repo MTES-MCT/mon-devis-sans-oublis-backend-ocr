@@ -70,13 +70,13 @@ class VLLMOCRService(BaseOCRService):
         if image.mode not in ('RGB', 'L'):
             image = image.convert('RGB')
         
-        # Save as JPEG for better compression
-        image.save(buffered, format="JPEG", quality=95)
+        # Save as PNG (DeepSeek might not handle JPEG well)
+        image.save(buffered, format="PNG")
         buffered.seek(0)
         
         # Encode to base64
         img_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
-        return f"data:image/jpeg;base64,{img_str}"
+        return f"data:image/png;base64,{img_str}"
     
     async def process_single_image(self, image: Image.Image, retry_count: int = 0) -> str:
         """
@@ -120,14 +120,18 @@ class VLLMOCRService(BaseOCRService):
                 ]
                 
                 logger.info(f"[{self._service_name}] Sending request to VLLM endpoint: {self._endpoint}")
+                logger.debug(f"[{self._service_name}] System prompt: {self._system_prompt}")
+                logger.debug(f"[{self._service_name}] Image base64 prefix: {base64_image[:100]}...")
                 logger.debug(f"[{self._service_name}] Request: model={self._model_name}, max_tokens={config.VLLM_MAX_TOKENS}, temperature=0")
+                logger.debug(f"[{self._service_name}] Message structure: {messages[0]['content'][0]['type']}, text: {messages[0]['content'][1]['text']}")
                 
                 # Call VLLM via OpenAI API
+                # Use max_tokens=2096 to match successful test
                 response = await self.client.chat.completions.create(
                     model=self._model_name,
                     messages=messages,
-                    max_tokens=config.VLLM_MAX_TOKENS,
-                    temperature=0,  # Deterministic output for OCR
+                    max_tokens=2096,
+                    temperature=0.0,  # Deterministic output for OCR (use float to match test)
                 )
                 
                 # Log full response for debugging
