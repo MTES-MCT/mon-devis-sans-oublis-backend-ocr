@@ -14,11 +14,6 @@ class DeepSeekOCRService(VLLMOCRService):
         # Set endpoint before calling parent __init__
         self._endpoint = config.DEEPSEEK_ENDPOINT
         
-        # Set optimized prompt for DeepSeek
-        self._system_prompt = (
-            "Extract all text from this document image, preserving the original "
-            "layout, structure, and formatting. Include tables, mathematical formulas, "
-            "and special characters. Maintain the reading order."
-        )
+        self._system_prompt = "Extract all text from this document."
         
         super().__init__()
