@@ -63,8 +63,6 @@ services:
       --logits_processors vllm.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor
       --no-enable-prefix-caching
       --mm-processor-cache-gb 0
-      --quantization bitsandbytes
-      --load-format bitsandbytes
       --max-model-len 4096
       --gpu-memory-utilization 0.5
       --host 0.0.0.0
