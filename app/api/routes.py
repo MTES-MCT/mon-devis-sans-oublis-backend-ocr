@@ -23,6 +23,7 @@ import tempfile
 import uuid
 import logging
 import asyncio
+import time
 from fastapi.concurrency import run_in_threadpool
 from apng import APNG
 from sentry_sdk import logger as sentry_logger
@@ -61,12 +62,17 @@ def pdf_pages_to_images(pdf_path, dpi=None):
     """
     if dpi is None:
         dpi = config.PDF_DPI
+    
+    start_time = time.time()
     doc = None
     try:
         doc = fitz.open(pdf_path)
         images = []
+        num_pages = len(doc)
         
-        for page_num in range(len(doc)):
+        logger.info(f"[PDF Conversion] Starting conversion of {num_pages} pages at {dpi} DPI")
+        
+        for page_num in range(num_pages):
             page = doc[page_num]
             
             # Create matrix for DPI scaling
@@ -82,7 +88,10 @@ def pdf_pages_to_images(pdf_path, dpi=None):
             
             # Free pixmap memory immediately
             pix = None
-            
+        
+        elapsed_time = time.time() - start_time
+        logger.info(f"[PDF Conversion] Completed {num_pages} pages in {elapsed_time:.2f}s ({elapsed_time/num_pages:.2f}s per page)")
+        
         return images
     finally:
         if doc:
@@ -257,7 +266,10 @@ async def ocr(
     images = None
     try:
         # Convert file to images
+        conversion_start = time.time()
         images = await run_in_threadpool(file_to_images, file)
+        conversion_time = time.time() - conversion_start
+        logger.info(f"[File Conversion] Converted {file.filename} to {len(images)} images in {conversion_time:.2f}s")
         
         # Process based on service type
         if isinstance(ocr_service, VLLMOCRService):

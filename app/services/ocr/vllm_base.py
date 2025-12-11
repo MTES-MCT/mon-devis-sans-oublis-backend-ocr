@@ -2,6 +2,7 @@ import base64
 import io
 import asyncio
 import logging
+import time
 from typing import List, Optional
 from abc import abstractmethod
 from PIL import Image
@@ -102,10 +103,14 @@ class VLLMOCRService(BaseOCRService):
         """
         async with self.semaphore:
             try:
+                image_start = time.time()
                 logger.info(f"[{self._service_name}] Starting image processing (attempt {retry_count + 1}/{self.max_retries})...")
                 
                 # Encode image to base64
+                encode_start = time.time()
                 base64_image = self.encode_image_to_base64(image)
+                encode_time = time.time() - encode_start
+                logger.debug(f"[{self._service_name}] Image encoding took {encode_time:.3f}s")
                 logger.debug(f"[{self._service_name}] Image encoded to base64 (size: {len(base64_image)} chars)")
                 
                 # Create message with vision content
@@ -147,7 +152,11 @@ class VLLMOCRService(BaseOCRService):
                     request_params["extra_body"] = self._extra_body
                     logger.debug(f"[{self._service_name}] Using extra_body: {self._extra_body}")
                 
+                # Time the VLLM API call
+                vllm_start = time.time()
                 response = await self.client.chat.completions.create(**request_params)
+                vllm_time = time.time() - vllm_start
+                logger.info(f"[{self._service_name}] VLLM API call took {vllm_time:.2f}s")
                 
                 # Log full response for debugging
                 logger.debug(f"[{self._service_name}] Full response object: {response}")
@@ -170,7 +179,9 @@ class VLLMOCRService(BaseOCRService):
                     # If we get an empty response, raise an error to trigger retry
                     raise VLLMProcessingError("Empty response from VLLM")
                 
-                logger.info(f"[{self._service_name}] Successfully received response (length: {len(text)} chars)")
+                total_time = time.time() - image_start
+                logger.info(f"[{self._service_name}] Successfully processed image in {total_time:.2f}s (VLLM: {vllm_time:.2f}s, encoding: {encode_time:.3f}s)")
+                logger.info(f"[{self._service_name}] Response length: {len(text)} chars")
                 logger.debug(f"[{self._service_name}] Response text preview: {text[:200]}...")
                 
                 return text
@@ -230,9 +241,17 @@ class VLLMOCRService(BaseOCRService):
         if not images:
             return []
         
+        batch_start = time.time()
+        num_images = len(images)
+        logger.info(f"[{self._service_name}] Starting batch processing of {num_images} images")
+        
         # Process all images concurrently with semaphore control
         tasks = [self.process_single_image(img) for img in images]
         results = await asyncio.gather(*tasks, return_exceptions=False)  # Don't catch exceptions
+        
+        batch_time = time.time() - batch_start
+        avg_time = batch_time / num_images if num_images > 0 else 0
+        logger.info(f"[{self._service_name}] Batch processing completed: {num_images} images in {batch_time:.2f}s (avg: {avg_time:.2f}s per image)")
         
         return results
     

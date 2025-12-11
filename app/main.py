@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 
 import sentry_sdk
 from fastapi import Depends, FastAPI, HTTPException, status
@@ -13,8 +14,20 @@ from app.api.routes import router as api_router
 from app.config import config
 from app.exceptions import OCRException
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Configure logging with proper format and handlers
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ],
+    force=True  # Force reconfiguration even if already configured
+)
+
+# Set log level for our application modules
+logging.getLogger('app').setLevel(logging.INFO)
+
+# Get logger for this module
 logger = logging.getLogger(__name__)
 
 api_key_header = APIKeyHeader(name=config.API_KEY_NAME, auto_error=False)
