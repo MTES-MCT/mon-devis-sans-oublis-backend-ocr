@@ -1,7 +1,16 @@
+# NOTE: Torch is installed explicitly in the Dockerfile to ensure we get CUDA
+# wheels when running on GPU hosts. Keeping it here would allow pip to pull a
+# CPU-only wheel from PyPI and override the CUDA build.
+
 gradio
 Pillow
 lxml
-transformers
+
+# Marker/Surya are sensitive to recent Transformers changes.
+# Pin to a known-good release to avoid `PreTrainedModel` import issues.
+# Ref: https://github.com/datalab-to/marker/issues/699
+transformers==4.51.2
+
 accelerate
 hf-transfer
 hf-xet
