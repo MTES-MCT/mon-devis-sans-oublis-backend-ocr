@@ -22,7 +22,7 @@ services:
       - huggingface_cache:/root/.cache/huggingface
     command:
       --model tencent/HunyuanOCR
-      --max-model-len 3072
+      --max-model-len 6144
       --gpu-memory-utilization 0.2
       --no-enable-prefix-caching
       --enforce-eager
@@ -56,7 +56,7 @@ services:
     command:
       --model deepseek-ai/DeepSeek-OCR
       --logits_processors vllm.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor
-      --max-model-len 3072
+      --max-model-len 6144
       --gpu-memory-utilization 0.2
       --no-enable-prefix-caching
       --enforce-eager
@@ -90,7 +90,7 @@ services:
       --model nanonets/Nanonets-OCR2-3B
       --quantization bitsandbytes
       --load-format bitsandbytes
-      --max-model-len 2048
+      --max-model-len 6144
       --mm-processor-cache-gb 0
       --gpu-memory-utilization 0.25
       --no-enable-prefix-caching
