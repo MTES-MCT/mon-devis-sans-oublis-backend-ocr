@@ -5,12 +5,14 @@ import threading
 import time
 import gc
 from typing import List, Optional
+
 from PIL import Image
 import img2pdf
 from marker.converters.pdf import PdfConverter
 from marker.models import create_model_dict
 from marker.output import text_from_rendered
-from .base import BaseOCRService
+
+from .base import BaseOCRService, OCRInputType
 
 
 class MarkerOCRService(BaseOCRService):
@@ -79,6 +81,11 @@ class MarkerOCRService(BaseOCRService):
         if self._converter is None:
             self._ensure_initialized()
         return self._converter
+
+    def preferred_input_type(self, file_extension: str) -> OCRInputType:
+        # Marker can process PDFs directly. For image uploads, routes will still
+        # convert to PIL images and we will re-wrap them into a PDF.
+        return "pdf" if file_extension == ".pdf" else "images"
 
     def process_pdf_file(self, pdf_path: str) -> str:
         """

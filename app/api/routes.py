@@ -11,7 +11,7 @@ from app.exceptions import (
     OCRProcessingError,
     GPUMemoryError
 )
-from typing import List
+from typing import Callable, List, Optional, TypeVar
 from PIL import Image
 import fitz
 import io
@@ -22,13 +22,129 @@ import torch
 import tempfile
 import uuid
 import logging
-import asyncio
 import time
 from fastapi.concurrency import run_in_threadpool
 from apng import APNG
 from sentry_sdk import logger as sentry_logger
 
 logger = logging.getLogger(__name__)
+
+# Define supported formats (shared by all services)
+SUPPORTED_FORMATS = [".pdf", ".png", ".jpg", ".jpeg", ".bmp", ".gif"]
+IMAGE_FORMATS = [".png", ".jpg", ".jpeg", ".bmp", ".gif"]
+
+T = TypeVar("T")
+
+
+def cleanup_temp_file(temp_file_path: Optional[str], *, filename: str) -> None:
+    """Best-effort deletion of a temporary file.
+
+    This project guarantees no persistent storage of user uploads; failures are
+    logged but should not fail the request.
+    """
+    if not temp_file_path:
+        return
+    if not os.path.exists(temp_file_path):
+        return
+
+    try:
+        os.remove(temp_file_path)
+    except OSError as e:
+        logger.warning(f"Failed to delete temp file {temp_file_path}: {e}")
+        sentry_logger.error(
+            'Failed to delete temporary file',
+            attributes={
+                'file.name': filename,
+                'temp.file.path': temp_file_path,
+                'error.type': type(e).__name__
+            }
+        )
+
+        # Try to schedule cleanup later
+        import atexit
+
+        def _cleanup(path: str = temp_file_path) -> None:
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+            except OSError:
+                pass
+
+        atexit.register(_cleanup)
+
+
+async def run_in_threadpool_with_gpu_retry(
+    func: Callable[..., T],
+    *args,
+    service_name: str,
+) -> T:
+    """Run a blocking OCR call in the threadpool with a single CUDA OOM retry."""
+    try:
+        return await run_in_threadpool(func, *args)
+    except torch.cuda.OutOfMemoryError:
+        sentry_logger.warning(
+            'GPU out of memory, attempting retry',
+            attributes={
+                'ocr.service': service_name,
+                'retry.attempt': 1
+            }
+        )
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
+
+        try:
+            return await run_in_threadpool(func, *args)
+        except torch.cuda.OutOfMemoryError:
+            sentry_logger.error(
+                'GPU out of memory after retry',
+                attributes={
+                    'ocr.service': service_name,
+                    'retry.attempted': True,
+                    'retry.success': False
+                }
+            )
+            raise GPUMemoryError(service_name=service_name, retry_attempted=True)
+
+
+def save_upload_to_temp_file(file: UploadFile, file_extension: str) -> str:
+    """Persist an `UploadFile` to a unique temporary path.
+
+    The caller is responsible for deleting the returned file path.
+
+    This is used both for:
+    - PDF -> image conversion (image-based services)
+    - Direct PDF processing (PDF-native services)
+    """
+    if file_extension not in SUPPORTED_FORMATS:
+        sentry_logger.warning(
+            'Unsupported file format',
+            attributes={
+                'file.name': file.filename,
+                'file.extension': file_extension,
+                'error.type': 'InvalidFileFormatError'
+            }
+        )
+        raise InvalidFileFormatError(file_extension, SUPPORTED_FORMATS)
+
+    # Best-effort rewind: depending on the client/middleware the stream might not
+    # be at position 0.
+    try:
+        file.file.seek(0)
+    except Exception:
+        pass
+
+    with tempfile.NamedTemporaryFile(
+        mode='wb',
+        suffix=file_extension,
+        prefix=f"ocr_{uuid.uuid4().hex}_",
+        delete=False
+    ) as temp_file:
+        temp_file_path = temp_file.name
+        shutil.copyfileobj(file.file, temp_file)
+
+    return temp_file_path
 
 def is_apng(file_path):
     try:
@@ -117,37 +233,13 @@ def file_to_images(file: UploadFile) -> List[Image.Image]:
     images = []
     file_extension = os.path.splitext(file.filename)[1].lower()
     temp_file_path = None
-    
-    # Define supported formats
-    SUPPORTED_FORMATS = [".pdf", ".png", ".jpg", ".jpeg", ".bmp", ".gif"]
-
-    if file_extension not in SUPPORTED_FORMATS:
-        sentry_logger.warning(
-            'Unsupported file format',
-            attributes={
-                'file.name': file.filename,
-                'file.extension': file_extension,
-                'error.type': 'InvalidFileFormatError'
-            }
-        )
-        raise InvalidFileFormatError(file_extension, SUPPORTED_FORMATS)
 
     try:
-        # Create a unique temporary file to avoid conflicts
-        # Use tempfile for better security and automatic cleanup
-        with tempfile.NamedTemporaryFile(
-            mode='wb',
-            suffix=file_extension,
-            prefix=f"ocr_{uuid.uuid4().hex}_",
-            delete=False
-        ) as temp_file:
-            temp_file_path = temp_file.name
-            # Copy uploaded file to temporary location
-            shutil.copyfileobj(file.file, temp_file)
-        
+        temp_file_path = save_upload_to_temp_file(file, file_extension)
+
         if file_extension == ".pdf":
             images = pdf_pages_to_images(temp_file_path)
-        elif file_extension in [".png", ".jpg", ".jpeg", ".bmp", ".gif"]:
+        elif file_extension in IMAGE_FORMATS:
             try:
                 if is_apng(temp_file_path):
                     extracted_frames = extract_apng_frames(temp_file_path)
@@ -177,7 +269,7 @@ def file_to_images(file: UploadFile) -> List[Image.Image]:
                     filename=file.filename,
                     error_detail=str(e)
                 )
-                
+
         if not images:
             sentry_logger.error(
                 'No images extracted from file',
@@ -190,7 +282,7 @@ def file_to_images(file: UploadFile) -> List[Image.Image]:
                 filename=file.filename,
                 error_detail="No images could be extracted from the file"
             )
-            
+
     except OCRException:
         # Re-raise our custom exceptions
         raise
@@ -211,29 +303,11 @@ def file_to_images(file: UploadFile) -> List[Image.Image]:
         )
     finally:
         # CRITICAL: Always delete the temporary file
-        # This ensures no files are kept in storage
-        if temp_file_path and os.path.exists(temp_file_path):
-            try:
-                os.remove(temp_file_path)
-                # Log successful cleanup for audit
-            except OSError as e:
-                # Log error but don't fail the request
-                logger.warning(f"Failed to delete temp file {temp_file_path}: {e}")
-                sentry_logger.error(
-                    'Failed to delete temporary file',
-                    attributes={
-                        'file.name': file.filename,
-                        'temp.file.path': temp_file_path,
-                        'error.type': type(e).__name__
-                    }
-                )
-                # Try to schedule cleanup later
-                import atexit
-                atexit.register(lambda: os.path.exists(temp_file_path) and os.remove(temp_file_path))
-        
+        cleanup_temp_file(temp_file_path, filename=file.filename)
+
         # Force garbage collection to free memory
         gc.collect()
-        
+
     return images
 
 
@@ -264,72 +338,32 @@ async def ocr(
         scope.set_context("file", file_info)
     
     images = None
+    pdf_temp_path = None
     try:
-        # Convert file to images
-        conversion_start = time.time()
-        images = await run_in_threadpool(file_to_images, file)
-        conversion_time = time.time() - conversion_start
-        logger.info(f"[File Conversion] Converted {file.filename} to {len(images)} images in {conversion_time:.2f}s")
-        
-        # Process based on service type
-        if isinstance(ocr_service, VLLMOCRService):
-            # VLLM services: async batch processing
+        file_extension = os.path.splitext(file.filename)[1].lower()
+
+        preferred_input = ocr_service.preferred_input_type(file_extension)
+
+        # If the service prefers direct PDF processing for this upload, avoid
+        # the sub-optimal PDF -> images -> PDF roundtrip.
+        if preferred_input == "pdf":
+            save_start = time.time()
+            pdf_temp_path = await run_in_threadpool(save_upload_to_temp_file, file, file_extension)
+            save_time = time.time() - save_start
+            logger.info(f"[File Save] Saved {file.filename} to temp PDF in {save_time:.2f}s")
+
+            process_fn = ocr_service.process_pdf_file
+
             try:
-                results = await ocr_service.process_images_async(images)
-            except VLLMProcessingError as e:
-                sentry_logger.error(
-                    'VLLM OCR processing failed',
-                    attributes={
-                        'ocr.service': service_name,
-                        'error.type': 'VLLMProcessingError',
-                        'error.message': str(e)
-                    }
+                process_start = time.time()
+                text = await run_in_threadpool_with_gpu_retry(
+                    process_fn, pdf_temp_path, service_name=service_name
                 )
-                raise OCRProcessingError(
-                    service_name=service_name,
-                    error_detail=f"VLLM processing failed: {str(e)}"
-                )
-            except Exception as e:
-                sentry_logger.error(
-                    'Unexpected VLLM error',
-                    attributes={
-                        'ocr.service': service_name,
-                        'error.type': type(e).__name__,
-                        'error.message': str(e)
-                    }
-                )
-                raise OCRProcessingError(
-                    service_name=service_name,
-                    error_detail=f"Unexpected error: {str(e)}"
-                )
-        else:
-            # Non-VLLM services (marker): sync processing with threadpool
-            try:
-                results = await run_in_threadpool(ocr_service.process_images, images)
-            except torch.cuda.OutOfMemoryError:
-                # Clear GPU memory and retry once
-                sentry_logger.warning(
-                    'GPU out of memory, attempting retry',
-                    attributes={
-                        'ocr.service': service_name,
-                        'retry.attempt': 1
-                    }
-                )
-                torch.cuda.empty_cache()
-                gc.collect()
-                
-                try:
-                    results = await run_in_threadpool(ocr_service.process_images, images)
-                except torch.cuda.OutOfMemoryError:
-                    sentry_logger.error(
-                        'GPU out of memory after retry',
-                        attributes={
-                            'ocr.service': service_name,
-                            'retry.attempted': True,
-                            'retry.success': False
-                        }
-                    )
-                    raise GPUMemoryError(service_name=service_name, retry_attempted=True)
+                process_time = time.time() - process_start
+                logger.info(f"[Direct PDF] Processed {file.filename} directly in {process_time:.2f}s")
+                results = [text]
+            except GPUMemoryError:
+                raise
             except Exception as e:
                 sentry_logger.error(
                     'OCR processing failed',
@@ -343,20 +377,84 @@ async def ocr(
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
                 gc.collect()
-                
+
                 raise OCRProcessingError(
                     service_name=service_name,
                     error_detail=str(e)
                 )
-        
+        else:
+            # Convert file to images (needed for image-based services, including VLLM)
+            conversion_start = time.time()
+            images = await run_in_threadpool(file_to_images, file)
+            conversion_time = time.time() - conversion_start
+            logger.info(f"[File Conversion] Converted {file.filename} to {len(images)} images in {conversion_time:.2f}s")
+
+            # Process based on service type
+            if isinstance(ocr_service, VLLMOCRService):
+                # VLLM services: async batch processing
+                try:
+                    results = await ocr_service.process_images_async(images)
+                except VLLMProcessingError as e:
+                    sentry_logger.error(
+                        'VLLM OCR processing failed',
+                        attributes={
+                            'ocr.service': service_name,
+                            'error.type': 'VLLMProcessingError',
+                            'error.message': str(e)
+                        }
+                    )
+                    raise OCRProcessingError(
+                        service_name=service_name,
+                        error_detail=f"VLLM processing failed: {str(e)}"
+                    )
+                except Exception as e:
+                    sentry_logger.error(
+                        'Unexpected VLLM error',
+                        attributes={
+                            'ocr.service': service_name,
+                            'error.type': type(e).__name__,
+                            'error.message': str(e)
+                        }
+                    )
+                    raise OCRProcessingError(
+                        service_name=service_name,
+                        error_detail=f"Unexpected error: {str(e)}"
+                    )
+            else:
+                # Non-VLLM services: sync processing with threadpool
+                try:
+                    results = await run_in_threadpool_with_gpu_retry(
+                        ocr_service.process_images, images, service_name=service_name
+                    )
+                except GPUMemoryError:
+                    raise
+                except Exception as e:
+                    sentry_logger.error(
+                        'OCR processing failed',
+                        attributes={
+                            'ocr.service': service_name,
+                            'error.type': type(e).__name__,
+                            'error.message': str(e)
+                        }
+                    )
+                    # Clear GPU memory on any error
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                    gc.collect()
+
+                    raise OCRProcessingError(
+                        service_name=service_name,
+                        error_detail=str(e)
+                    )
+
         # Join the text from all pages/images
         full_text = "\n\n--- Page Break ---\n\n".join(results)
-        
+
         # Log successful processing
         logger.info(f"Successfully processed {file.filename} with {service_name}")
-        
+
         return OCRResponse(text=full_text)
-        
+
     finally:
         # Ensure complete memory cleanup
         if images:
@@ -364,9 +462,12 @@ async def ocr(
                 if hasattr(img, 'close'):
                     img.close()
             del images
-        
+
+        # Ensure no persistent storage (direct-PDF path)
+        cleanup_temp_file(pdf_temp_path, filename=file.filename)
+
         gc.collect()
-        
+
         # Clear GPU memory for non-VLLM services
         if not isinstance(ocr_service, VLLMOCRService) and torch.cuda.is_available():
             torch.cuda.empty_cache()
