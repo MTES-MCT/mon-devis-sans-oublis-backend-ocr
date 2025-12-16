@@ -1,5 +1,3 @@
-version: '3.8'
-
 networks:
   ocr-network:
     driver: bridge
@@ -101,7 +99,7 @@ services:
 
   # 4. API (Starts Last)
   api:
-    runtime: nvidia
+    gpus: all
     build:
       context: .
       dockerfile: Dockerfile

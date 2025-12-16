@@ -53,16 +53,24 @@ def _configure_marker_environment() -> None:
     os.environ.setdefault("PAGE_DPI", marker_dpi)
 
     # Prefer GPU if available.
-    # Only force cuda when torch reports it is available.
+    # IMPORTANT: if `import torch` fails (missing CUDA driver libs, wrong wheel,
+    # etc.), transformers will silently disable torch-backed symbols (like
+    # PreTrainedModel), which breaks surya/marker.
     try:
         import torch
+    except Exception as e:
+        logger.exception(
+            "Failed to import torch inside the API container. "
+            "This usually means the container has no access to NVIDIA driver libs "
+            "(missing `gpus: all` / NVIDIA Container Toolkit), or torch was installed "
+            "with incompatible binaries. Error: %s",
+            e,
+        )
+        raise
 
-        if torch.cuda.is_available():
-            os.environ.setdefault("TORCH_DEVICE", "cuda")
-        else:
-            os.environ.setdefault("TORCH_DEVICE", "cpu")
-    except Exception:
-        # If torch can't be imported, do not crash import; marker will fallback.
+    if torch.cuda.is_available():
+        os.environ.setdefault("TORCH_DEVICE", "cuda")
+    else:
         os.environ.setdefault("TORCH_DEVICE", "cpu")
 
 
@@ -221,7 +229,7 @@ class MarkerOCRService(BaseOCRService):
             except Exception as e:
                 logger.exception("Error processing PDF with Marker: %s", e)
                 gc.collect()
-                return ""
+                raise
 
     def process_images(self, images: List[Image.Image]) -> List[str]:
         """
