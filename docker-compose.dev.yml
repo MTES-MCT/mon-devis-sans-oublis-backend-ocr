@@ -9,118 +9,100 @@ volumes:
     driver: local
 
 services:
-  # nanonets-vllm:
-  #   image: vllm/vllm-openai:latest
-  #   container_name: nanonets-vllm-dev
-  #   runtime: nvidia
-  #   environment:
-  #     - HF_TOKEN=${HF_TOKEN}
-  #     - NVIDIA_VISIBLE_DEVICES=0
-  #   volumes:
-  #     - huggingface_cache:/root/.cache/huggingface
-  #   # 0.25 * 44GB = 11GB (Needs more space as it is 3B params)
-  #   command: >
-  #     --model nanonets/Nanonets-OCR2-3B
-  #     --quantization bitsandbytes
-  #     --load-format bitsandbytes
-  #     --max-model-len 3072
-  #     --enforce-eager
-  #     --mm-processor-cache-gb 0
-  #     --gpu-memory-utilization 0.25
-  #     --host 0.0.0.0
-  #     --port 8000
-  #   shm_size: '4gb'
-  #   deploy:
-  #     resources:
-  #       reservations:
-  #         devices:
-  #           - driver: nvidia
-  #             count: 1
-  #             capabilities: [gpu]
-  #   # Strict healthcheck to ensure it is fully loaded before next service starts
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 20
-  #     start_period: 30s
-  #   restart: unless-stopped
-  #   networks:
-  #     - ocr-network
 
-  deepseek-vllm:
-    image: vllm/vllm-openai:latest
-    container_name: deepseek-vllm-dev
+  hunyuan-vllm:
+    build:
+      context: ./kvcached
+      dockerfile: Dockerfile.vllm-kvcached
+    container_name: hunyuan-vllm
     runtime: nvidia
     environment:
-      - HF_TOKEN=${HF_TOKEN}
-      - NVIDIA_VISIBLE_DEVICES=0
+      HF_TOKEN: ${HF_TOKEN}
+      NVIDIA_VISIBLE_DEVICES: "0"
     volumes:
       - huggingface_cache:/root/.cache/huggingface
-    # 0.2 * 44GB = 8.8GB (DeepSeek OCR is usually smaller, ~1.3B)
-    command: >
-      --model deepseek-ai/DeepSeek-OCR
-      --logits_processors vllm.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor
+    command:
+      --model tencent/HunyuanOCR
+      --max-model-len 3072
+      --gpu-memory-utilization 0.2
       --no-enable-prefix-caching
-      --mm-processor-cache-gb 0
-      --max-model-len 4096
-      --gpu-memory-utilization 0.5
+      --enforce-eager
       --host 0.0.0.0
-      --port 8000
-    shm_size: '4gb'
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+      --port 8002
+    shm_size: "4gb"
+    networks: [ocr-network]
+    restart: unless-stopped
+
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
       interval: 10s
       timeout: 5s
-      retries: 20
-      start_period: 30s
-    restart: unless-stopped
-    networks:
-      - ocr-network
+      retries: 30
+      start_period: 120s
 
-  # hunyuan-vllm:
-  #   image: vllm/vllm-openai:latest
-  #   container_name: hunyuan-vllm-dev
-  #   runtime: nvidia
-  #   environment:
-  #     - HF_TOKEN=${HF_TOKEN}
-  #     - NVIDIA_VISIBLE_DEVICES=0
-  #   volumes:
-  #     - huggingface_cache:/root/.cache/huggingface
-  #   # 0.2 * 44GB = 8.8GB
-  #   command: >
-  #     --model tencent/HunyuanOCR
-  #     --no-enable-prefix-caching
-  #     --mm-processor-cache-gb 0
-  #     --max-model-len 16384
-  #     --dtype auto
-  #     --gpu-memory-utilization 0.75
-  #     --host 0.0.0.0
-  #     --port 8000
-  #   shm_size: '4gb'
-  #   deploy:
-  #     resources:
-  #       reservations:
-  #         devices:
-  #           - driver: nvidia
-  #             count: 1
-  #             capabilities: [gpu]
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 20
-  #     start_period: 30s
-  #   restart: unless-stopped
-  #   networks:
-  #     - ocr-network
+
+  deepseek-vllm:
+    build:
+      context: ./kvcached
+      dockerfile: Dockerfile.vllm-kvcached
+    container_name: deepseek-vllm
+    runtime: nvidia
+    depends_on:
+      hunyuan:
+        condition: service_healthy
+    environment:
+      HF_TOKEN: ${HF_TOKEN}
+      NVIDIA_VISIBLE_DEVICES: "0"
+    volumes:
+      - huggingface_cache:/root/.cache/huggingface
+    command:
+      --model deepseek-ai/DeepSeek-OCR
+      --logits_processors vllm.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor
+      --max-model-len 3072
+      --gpu-memory-utilization 0.2
+      --no-enable-prefix-caching
+      --enforce-eager
+      --host 0.0.0.0
+      --port 8001
+    shm_size: "4gb"
+    networks: [ocr-network]
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
+
+  nanonets-vllm:
+    build:
+      context: ./kvcached
+      dockerfile: Dockerfile.vllm-kvcached
+    container_name: nanonets-vllm
+    runtime: nvidia
+    depends_on:
+      deepseek:
+        condition: service_healthy
+    environment:
+      HF_TOKEN: ${HF_TOKEN}
+      NVIDIA_VISIBLE_DEVICES: "0"
+    volumes:
+      - huggingface_cache:/root/.cache/huggingface
+    command:
+      --model nanonets/Nanonets-OCR2-3B
+      --quantization bitsandbytes
+      --load-format bitsandbytes
+      --max-model-len 2048
+      --mm-processor-cache-gb 0
+      --gpu-memory-utilization 0.25
+      --no-enable-prefix-caching
+      --enforce-eager
+      --host 0.0.0.0
+      --port 8000
+    shm_size: "4gb"
+    networks: [ocr-network]
+    restart: unless-stopped
 
   # 4. API (Starts Last)
   api:
@@ -149,13 +131,13 @@ services:
       - ./app:/app/app
       - huggingface_cache:/root/.cache/huggingface
       - ./temp:/tmp
-    # depends_on:
-    #   nanonets-vllm:
-    #     condition: service_healthy
-    #   deepseek-vllm:
-    #     condition: service_healthy
-    #   hunyuan-vllm:
-    #     condition: service_healthy
+    depends_on:
+      nanonets-vllm:
+        condition: service_healthy
+      deepseek-vllm:
+        condition: service_healthy
+      hunyuan-vllm:
+        condition: service_healthy
     networks:
       - ocr-network
     restart: unless-stopped
