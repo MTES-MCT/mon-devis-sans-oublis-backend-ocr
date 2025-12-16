@@ -25,13 +25,13 @@ services:
       --max-model-len 4096
       --gpu-memory-utilization 0.2
       --host 0.0.0.0
-      --port 8001
+      --port 8011
     shm_size: "4gb"
     networks: [ocr-network]
     restart: unless-stopped
 
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8011/health"]
       interval: 10s
       timeout: 5s
       retries: 30
@@ -58,13 +58,13 @@ services:
       --gpu-memory-utilization 0.2
       --no-enable-prefix-caching
       --host 0.0.0.0
-      --port 8002
+      --port 8012
     shm_size: "4gb"
     networks: [ocr-network]
     restart: unless-stopped
 
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8012/health"]
       interval: 10s
       timeout: 5s
       retries: 30
@@ -92,12 +92,12 @@ services:
       --gpu-memory-utilization 0.25
       --enforce-eager
       --host 0.0.0.0
-      --port 8003
+      --port 8013
     shm_size: "4gb"
     networks: [ocr-network]
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8013/health"]
 
   # 4. API (Starts Last)
   api:
@@ -110,9 +110,9 @@ services:
     environment:
       - API_KEY=${API_KEY:-dev-api-key}
       - ENABLED_SERVICES=${ENABLED_SERVICES:-marker,nanonets,deepseek-ocr,hunyuan-ocr}
-      - HUNYUAN_ENDPOINT=http://hunyuan-vllm:8001/v1
-      - DEEPSEEK_ENDPOINT=http://deepseek-vllm:8002/v1
-      - NANONETS_ENDPOINT=http://nanonets-vllm:8003/v1
+      - HUNYUAN_ENDPOINT=http://hunyuan-vllm:8011/v1
+      - DEEPSEEK_ENDPOINT=http://deepseek-vllm:8012/v1
+      - NANONETS_ENDPOINT=http://nanonets-vllm:8013/v1
       - MAX_CONCURRENT_OCR_REQUESTS=3
       - WORKERS=1
       - LOG_LEVEL=debug

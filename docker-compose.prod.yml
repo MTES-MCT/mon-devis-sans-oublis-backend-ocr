@@ -9,198 +9,137 @@ volumes:
     driver: local
 
 services:
-  # Main Backend API
+
+  hunyuan-vllm:
+    build:
+      context: ./kvcached
+      dockerfile: Dockerfile.vllm-kvcached
+    runtime: nvidia
+    environment:
+      HF_TOKEN: ${HF_TOKEN}
+      NVIDIA_VISIBLE_DEVICES: "0"
+    volumes:
+      - huggingface_cache:/root/.cache/huggingface
+    command:
+      --model tencent/HunyuanOCR
+      --max-model-len 4096
+      --gpu-memory-utilization 0.2
+      --host 0.0.0.0
+      --port 8011
+    shm_size: "4gb"
+    networks: [ocr-network]
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8011/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
+
+
+  deepseek-vllm:
+    build:
+      context: ./kvcached
+      dockerfile: Dockerfile.vllm-kvcached
+    runtime: nvidia
+    depends_on:
+      hunyuan-vllm:
+        condition: service_healthy
+    environment:
+      HF_TOKEN: ${HF_TOKEN}
+      NVIDIA_VISIBLE_DEVICES: "0"
+    volumes:
+      - huggingface_cache:/root/.cache/huggingface
+    command:
+      --model deepseek-ai/DeepSeek-OCR
+      --logits_processors vllm.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor
+      --max-model-len 4096
+      --gpu-memory-utilization 0.2
+      --no-enable-prefix-caching
+      --host 0.0.0.0
+      --port 8012
+    shm_size: "4gb"
+    networks: [ocr-network]
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8012/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
+
+  nanonets-vllm:
+    build:
+      context: ./kvcached
+      dockerfile: Dockerfile.vllm-kvcached
+    runtime: nvidia
+    depends_on:
+      deepseek-vllm:
+        condition: service_healthy
+    environment:
+      HF_TOKEN: ${HF_TOKEN}
+      NVIDIA_VISIBLE_DEVICES: "0"
+    volumes:
+      - huggingface_cache:/root/.cache/huggingface
+    command:
+      --model nanonets/Nanonets-OCR2-3B
+      --quantization bitsandbytes
+      --load-format bitsandbytes
+      --max-model-len 4096
+      --mm-processor-cache-gb 0
+      --gpu-memory-utilization 0.25
+      --enforce-eager
+      --host 0.0.0.0
+      --port 8013
+    shm_size: "4gb"
+    networks: [ocr-network]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8013/health"]
+
+  # 4. API (Starts Last)
   api:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ocr-backend:prod
-    container_name: ocr-backend-prod
+    image: ocr-backend:dev
     env_file:
       - .env
     environment:
-      # API Security
-      - API_KEY=${API_KEY}
+      - API_KEY=${API_KEY:-dev-api-key}
       - SENTRY_DNS=${SENTRY_DNS}
-      
-      # Enabled Services
-      # NOTE: Only marker service is enabled in production
-      # To enable VLLM: uncomment services below and update this line
       - ENABLED_SERVICES=${ENABLED_SERVICES:-marker}
-      
-      # VLLM Endpoints (internal Docker network)
-      - NANONETS_ENDPOINT=http://nanonets-vllm:8000/v1
-      - DEEPSEEK_ENDPOINT=http://deepseek-vllm:8000/v1
-      - HUNYUAN_ENDPOINT=http://hunyuan-vllm:8000/v1
-      
-      # Concurrency Control
+      - HUNYUAN_ENDPOINT=http://hunyuan-vllm:8011/v1
+      - DEEPSEEK_ENDPOINT=http://deepseek-vllm:8012/v1
+      - NANONETS_ENDPOINT=http://nanonets-vllm:8013/v1
       - MAX_CONCURRENT_OCR_REQUESTS=3
-      
-      # Worker Settings (Production: 4 workers for better throughput)
-      - WORKERS=${WORKERS:-4}
-      - WORKER_CLASS=uvicorn.workers.UvicornWorker
-      - LOG_LEVEL=${LOG_LEVEL:-info}
-      - ACCESS_LOG=true
+      - WORKERS=1
+      - LOG_LEVEL=debug
       - HOST=0.0.0.0
       - PORT=80
-      
-      # Performance Tuning
-      - WORKER_CONNECTIONS=100
-      - MAX_REQUESTS=500
-      - MAX_REQUESTS_JITTER=50
-      - TIMEOUT=600
-      - GRACEFUL_TIMEOUT=60
-      - KEEPALIVE=5
-      
-      # Storage
       - HF_HOME=/root/.cache/huggingface
-      - CUDA_VISIBLE_DEVICES=0
-      - HF_HUB_OFFLINE=1
-    
     ports:
       - "8000:80"
-    
     volumes:
+      - ./app:/app/app
       - huggingface_cache:/root/.cache/huggingface
       - ./temp:/tmp
-    
-    # Uncomment when enabling VLLM services
-    # depends_on:
-    #   nanonets-vllm:
-    #     condition: service_healthy
-    #   deepseek-vllm:
-    #     condition: service_healthy
-    #   hunyuan-vllm:
-    #     condition: service_healthy
-    
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-    
+    depends_on:
+      nanonets-vllm:
+        condition: service_healthy
+      deepseek-vllm:
+        condition: service_healthy
+      hunyuan-vllm:
+        condition: service_healthy
     networks:
       - ocr-network
-    
     restart: unless-stopped
-    
     healthcheck:
       test: ["CMD", "curl", "-f", "-H", "x-api-key: ${API_KEY:-dev-api-key}", "http://localhost/health"]
-      interval: 60s
-      timeout: 30s
-      retries: 5
-      start_period: 120s
-
-  # VLLM Service: Nanonets OCR (Disabled in Production)
-  # Uncomment to enable in production
-  # nanonets-vllm:
-  #   image: vllm/vllm-openai:latest
-  #   container_name: nanonets-vllm-prod
-  #   runtime: nvidia
-  #   environment:
-  #     - HF_TOKEN=${HF_TOKEN}
-  #     - NVIDIA_VISIBLE_DEVICES=0
-  #   volumes:
-  #     - huggingface_cache:/root/.cache/huggingface
-  #   command: >
-  #     --model nanonets/Nanonets-OCR2-3B
-  #     --quantization bitsandbytes
-  #     --load-format bitsandbytes
-  #     --max-model-len 4096
-  #     --gpu-memory-utilization 0.2
-  #     --host 0.0.0.0
-  #     --port 8000
-  #   shm_size: '2gb'
-  #   deploy:
-  #     resources:
-  #       reservations:
-  #         devices:
-  #           - driver: nvidia
-  #             count: 1
-  #             capabilities: [gpu]
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-  #     interval: 30s
-  #     timeout: 10s
-  #     retries: 3
-  #     start_period: 120s
-  #   restart: unless-stopped
-  #   networks:
-  #     - ocr-network
-
-  # VLLM Service: DeepSeek OCR (Disabled in Production)
-  # Uncomment to enable in production
-  # deepseek-vllm:
-  #   image: vllm/vllm-openai:latest
-  #   container_name: deepseek-vllm-prod
-  #   runtime: nvidia
-  #   environment:
-  #     - HF_TOKEN=${HF_TOKEN}
-  #     - NVIDIA_VISIBLE_DEVICES=0
-  #   volumes:
-  #     - huggingface_cache:/root/.cache/huggingface
-  #   command: >
-  #     --model deepseek-ai/DeepSeek-OCR
-  #     --logits_processors vllm.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor
-  #     --no-enable-prefix-caching
-  #     --mm-processor-cache-gb 0
-  #     --max-model-len 4096
-  #     --gpu-memory-utilization 0.3
-  #     --host 0.0.0.0
-  #     --port 8000
-  #   shm_size: '2gb'
-  #   deploy:
-  #     resources:
-  #       reservations:
-  #         devices:
-  #           - driver: nvidia
-  #             count: 1
-  #             capabilities: [gpu]
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-  #     interval: 30s
-  #     timeout: 10s
-  #     retries: 3
-  #     start_period: 120s
-  #   restart: unless-stopped
-  #   networks:
-  #     - ocr-network
-
-  # VLLM Service: Hunyuan OCR (Disabled in Production)
-  # Uncomment to enable in production
-  # hunyuan-vllm:
-  #   image: vllm/vllm-openai:latest
-  #   container_name: hunyuan-vllm-prod
-  #   runtime: nvidia
-  #   environment:
-  #     - HF_TOKEN=${HF_TOKEN}
-  #     - NVIDIA_VISIBLE_DEVICES=0
-  #   volumes:
-  #     - huggingface_cache:/root/.cache/huggingface
-  #   command: >
-  #     --model tencent/HunyuanOCR
-  #     --no-enable-prefix-caching
-  #     --mm-processor-cache-gb 0
-  #     --max-model-len 4096
-  #     --gpu-memory-utilization 0.15
-  #     --host 0.0.0.0
-  #     --port 8000
-  #   shm_size: '2gb'
-  #   deploy:
-  #     resources:
-  #       reservations:
-  #         devices:
-  #           - driver: nvidia
-  #             count: 1
-  #             capabilities: [gpu]
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-  #     interval: 30s
-  #     timeout: 10s
-  #     retries: 3
-  #     start_period: 120s
-  #   restart: unless-stopped
-  #   networks:
-  #     - ocr-network
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "80", "--reload"]
