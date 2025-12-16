@@ -20,6 +20,14 @@ class BaseOCRService(ABC):
     def __init__(self) -> None:
         super().__init__()
 
+    def warmup(self) -> None:
+        """Optional warmup hook.
+
+        Used during Docker image build to pre-download / initialize models.
+        Default is a no-op.
+        """
+        return
+
     def preferred_input_type(self, file_extension: str) -> OCRInputType:
         """Return the preferred input type for the given uploaded file extension.
 

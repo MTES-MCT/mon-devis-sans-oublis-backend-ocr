@@ -37,16 +37,27 @@ def discover_services():
         try:
             # Import the module
             module = __import__(f"{package_name}.{module_name}", fromlist=["*"])
-            
+
             # Find all classes in the module and register them if they are a service
-            for name, obj in inspect.getmembers(module, inspect.isclass):
+            for _, obj in inspect.getmembers(module, inspect.isclass):
                 register_service(obj)
         except ImportError as e:
-            # Skip modules that can't be imported (e.g., marker during build phase)
-            pass
+            # Skip modules that can't be imported.
+            # This may happen during image build or when optional deps are missing.
+            logger.debug("Failed to import OCR module %s: %s", module_name, e)
         except Exception as e:
-            # Log other errors but continue
-            pass
+            # IMPORTANT: don't swallow this silently.
+            # If a service fails to initialize, it will disappear and the API will
+            # return 404 (service not found), which is hard to diagnose.
+            logger.exception("Error while discovering OCR module %s: %s", module_name, e)
+            sentry_logger.error(
+                'OCR service discovery failed',
+                attributes={
+                    'ocr.module': module_name,
+                    'error.type': type(e).__name__,
+                    'error.message': str(e),
+                },
+            )
 
 # Discover and register services when the package is imported
 discover_services()

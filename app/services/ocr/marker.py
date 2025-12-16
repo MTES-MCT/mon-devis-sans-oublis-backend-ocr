@@ -96,7 +96,6 @@ class MarkerOCRService(BaseOCRService):
         super().__init__()
         self.lock = threading.Lock()  # Lock to serialize PDF processing
         self._converter = None
-        self._ensure_initialized()
 
     def _ensure_initialized(self):
         """Ensure each worker has its own converter instance"""
@@ -186,6 +185,9 @@ class MarkerOCRService(BaseOCRService):
         if self._converter is None:
             self._ensure_initialized()
         return self._converter
+
+    def warmup(self) -> None:
+        self._ensure_initialized()
 
     def preferred_input_type(self, file_extension: str) -> OCRInputType:
         # Marker can process PDFs directly. For image uploads, routes will still
