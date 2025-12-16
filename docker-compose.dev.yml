@@ -101,6 +101,7 @@ services:
 
   # 4. API (Starts Last)
   api:
+    runtime: nvidia
     build:
       context: .
       dockerfile: Dockerfile
@@ -108,6 +109,7 @@ services:
     env_file:
       - .env
     environment:
+      - NVIDIA_VISIBLE_DEVICES=0
       - API_KEY=${API_KEY:-dev-api-key}
       - ENABLED_SERVICES=${ENABLED_SERVICES:-marker,nanonets,deepseek-ocr,hunyuan-ocr}
       - HUNYUAN_ENDPOINT=http://hunyuan-vllm:8011/v1

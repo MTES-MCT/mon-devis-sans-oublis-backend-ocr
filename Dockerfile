@@ -1,5 +1,7 @@
 # Use an official Python runtime as a parent image
-FROM python:3.14-slim
+# PyTorch CUDA wheels are not available for Python 3.14 yet.
+# Using 3.12 ensures we can install CUDA-enabled torch builds.
+FROM python:3.12-slim
 
 # Set the working directory in the container
 WORKDIR /app
@@ -32,11 +34,16 @@ RUN apt-get update && apt-get install -y \
 # Copy the requirements file into the container at /app
 COPY ./requirements.txt /app/requirements.txt
 
-# Install PyTorch first (required for flash-attn compilation)
-#RUN pip install --no-cache-dir torch>=2.0.0 torchvision --extra-index-url https://download.pytorch.org/whl/cu121
+# Upgrade pip and install CUDA-enabled PyTorch explicitly.
+# We do this outside of requirements.txt to avoid pip later overriding it with a
+# CPU-only torch wheel from PyPI.
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir \
+      torch torchvision \
+      --index-url https://download.pytorch.org/whl/cu121
 
-# Install remaining packages including flash-attn (which requires torch during build)
-RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt --extra-index-url https://download.pytorch.org/whl/cu121
+# Install remaining packages
+RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt
 
 # First copy only the files needed for downloading models
 # Only marker models need to be downloaded in the backend

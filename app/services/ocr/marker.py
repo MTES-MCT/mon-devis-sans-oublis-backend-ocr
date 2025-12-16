@@ -1,18 +1,90 @@
+import gc
 import io
-import tempfile
+import logging
 import os
+import tempfile
 import threading
 import time
-import gc
-from typing import List, Optional
+from typing import List
 
-from PIL import Image
 import img2pdf
-from marker.converters.pdf import PdfConverter
-from marker.models import create_model_dict
-from marker.output import text_from_rendered
+from PIL import Image
 
 from .base import BaseOCRService, OCRInputType
+
+logger = logging.getLogger(__name__)
+
+
+def _configure_marker_environment() -> None:
+    """Configure marker runtime defaults for this API service.
+
+    Goals for this backend endpoint:
+    - Always OCR full pages (even if a PDF contains an OCR layer or text)
+    - Never return extracted image placeholders as the primary output
+    - Prefer GPU execution when available
+
+    Note: marker reads many settings from environment variables in its
+    `marker.settings` module at import time. Therefore this function must run
+    before importing marker modules.
+    """
+    # Force OCR for all pages (treat this service as an OCR engine, not a text extractor)
+    os.environ["OCR_ALL_PAGES"] = os.getenv("MARKER_OCR_ALL_PAGES", "true")
+
+    # Compatibility with alternative naming seen in some marker versions / wrappers
+    os.environ.setdefault("FORCE_OCR", os.getenv("MARKER_FORCE_OCR", "true"))
+
+    # If the PDF contains a bad OCR layer, prefer re-OCR.
+    # Some marker versions use STRIP_EXISTING_OCR, others use STRIP_OCR.
+    os.environ["STRIP_EXISTING_OCR"] = os.getenv("MARKER_STRIP_EXISTING_OCR", "true")
+    os.environ.setdefault("STRIP_OCR", os.environ["STRIP_EXISTING_OCR"])
+
+    # Avoid returning figure/image placeholders like ![](_page_0_Figure_0.jpeg)
+    os.environ["DISABLE_IMAGE_EXTRACTION"] = os.getenv(
+        "MARKER_DISABLE_IMAGE_EXTRACTION",
+        "true",
+    )
+
+    # Improve OCR detection robustness for scanned PDFs.
+    # Marker uses a settings-driven DPI for PDF rasterization.
+    # Different versions/wrappers may use different env var names.
+    marker_dpi = os.getenv("MARKER_PDF_DPI", "200")
+    os.environ.setdefault("PDF_DPI", marker_dpi)
+    os.environ.setdefault("RENDER_DPI", marker_dpi)
+    os.environ.setdefault("PAGE_DPI", marker_dpi)
+
+    # Prefer GPU if available.
+    # Only force cuda when torch reports it is available.
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            os.environ.setdefault("TORCH_DEVICE", "cuda")
+        else:
+            os.environ.setdefault("TORCH_DEVICE", "cpu")
+    except Exception:
+        # If torch can't be imported, do not crash import; marker will fallback.
+        os.environ.setdefault("TORCH_DEVICE", "cpu")
+
+
+def _strip_marker_image_placeholders(text: str) -> str:
+    """Remove marker image placeholders from markdown output.
+
+    Marker can emit lines like `![](_page_0_Figure_0.jpeg)` for extracted images.
+
+    If removing placeholders would result in an (almost) empty output, keep the
+    original text to avoid returning a blank response.
+    """
+    cleaned_lines: List[str] = []
+    for line in text.splitlines():
+        s = line.strip()
+        if s.startswith("![](") and "_page_" in s:
+            continue
+        cleaned_lines.append(line)
+
+    cleaned = "\n".join(cleaned_lines).strip()
+    if len(cleaned) < 20:
+        return text.strip()
+    return cleaned
 
 
 class MarkerOCRService(BaseOCRService):
@@ -46,28 +118,61 @@ class MarkerOCRService(BaseOCRService):
             max_retries = 3
             for attempt in range(max_retries):
                 try:
+                    # Configure env-driven marker settings before importing marker.
+                    _configure_marker_environment()
+
+                    # Import marker after env configuration (marker.settings reads env at import time)
+                    from marker.config.parser import ConfigParser
+                    from marker.converters.pdf import PdfConverter
+                    from marker.models import create_model_dict
+
                     # Prevent re-downloading if models exist
                     if os.path.exists('/root/.cache/datalab/models'):
                         os.environ['HF_HUB_OFFLINE'] = '1'
-                    
+
                     # Add small delay between worker initializations to avoid conflicts
                     if len(MarkerOCRService._worker_converters) > 0:
                         time.sleep(0.5 * len(MarkerOCRService._worker_converters))
-                    
+
+                    # Build the converter the same way `marker_single` does.
+                    marker_config = {
+                        "output_format": "markdown",
+                        "force_ocr": True,
+                        "strip_existing_ocr": True,
+                        "disable_image_extraction": True,
+                        "use_llm": False,
+                        "workers": 1,
+                    }
+                    config_parser = ConfigParser(marker_config)
+
                     converter = PdfConverter(
+                        config=config_parser.generate_config_dict(),
                         artifact_dict=create_model_dict(),
+                        processor_list=config_parser.get_processors(),
+                        renderer=config_parser.get_renderer(),
+                        llm_service=config_parser.get_llm_service(),
                     )
-                    
+
                     # Store converter for this worker
                     MarkerOCRService._worker_converters[pid] = converter
                     self._converter = converter
-                    
-                    print(f"Marker OCR service initialized for worker {pid} on attempt {attempt + 1}")
+
+                    logger.info(
+                        "Marker OCR service initialized for worker %s on attempt %s",
+                        pid,
+                        attempt + 1,
+                    )
                     break
-                    
+
                 except Exception as e:
                     if attempt < max_retries - 1:
-                        print(f"Failed to initialize Marker OCR for worker {pid} (attempt {attempt + 1}/{max_retries}): {e}")
+                        logger.warning(
+                            "Failed to initialize Marker OCR for worker %s (attempt %s/%s): %s",
+                            pid,
+                            attempt + 1,
+                            max_retries,
+                            e,
+                        )
                         time.sleep(2 ** attempt)  # Exponential backoff
                         gc.collect()  # Force garbage collection
                     else:
@@ -99,16 +204,20 @@ class MarkerOCRService(BaseOCRService):
         """
         with self.lock:  # Serialize access to prevent concurrent PDF processing
             try:
+                # Import lazily (see note about marker env reading at import time)
+                from marker.output import text_from_rendered
+
                 rendered = self.converter(pdf_path)
                 text, _, _ = text_from_rendered(rendered)
-                
+                text = _strip_marker_image_placeholders(text)
+
                 # Clean up to prevent memory leaks
                 del rendered
                 gc.collect()
-                
+
                 return text
             except Exception as e:
-                print(f"Error processing PDF with Marker: {e}")
+                logger.exception("Error processing PDF with Marker: %s", e)
                 gc.collect()
                 return ""
 
@@ -174,6 +283,6 @@ class MarkerOCRService(BaseOCRService):
                 gc.collect()
 
         except Exception as e:
-            print(f"Error in process_images: {e}")
+            logger.exception("Error in process_images: %s", e)
             gc.collect()
             return [""]
