@@ -58,17 +58,23 @@ COPY app/services/__init__.py /app/app/services/__init__.py
 COPY app/config.py /app/app/config.py
 COPY download_models.py /app/download_models.py
 
-# Set default environment variables for model download
+# Optional: download marker models during image build.
+#
+# IMPORTANT: if you install a CUDA-enabled torch wheel, importing torch during
+# `docker build` may fail because NVIDIA driver libraries are not mounted at
+# build time. Therefore this is opt-in.
+ARG DOWNLOAD_MODELS=0
+
 # Only download marker models - VLLM models are loaded in separate containers
 ENV ENABLED_SERVICES="marker"
 ENV HF_HUB_OFFLINE="0"
 
-# Run the download script to populate the cache
-# This layer will be cached as long as the download-related files don't change.
-RUN python download_models.py
-
-# After models are downloaded, set offline mode as default
-ENV HF_HUB_OFFLINE="1"
+# Run the download script to populate the cache (opt-in)
+RUN if [ "${DOWNLOAD_MODELS}" = "1" ]; then \
+      python download_models.py; \
+    else \
+      echo "Skipping model download during build (DOWNLOAD_MODELS=${DOWNLOAD_MODELS})"; \
+    fi
 
 # Now copy the rest of the application
 COPY . /app
