@@ -14,7 +14,6 @@ services:
     build:
       context: ./kvcached
       dockerfile: Dockerfile.vllm-kvcached
-    container_name: hunyuan-vllm
     runtime: nvidia
     environment:
       HF_TOKEN: ${HF_TOKEN}
@@ -45,7 +44,6 @@ services:
     build:
       context: ./kvcached
       dockerfile: Dockerfile.vllm-kvcached
-    container_name: deepseek-vllm
     runtime: nvidia
     depends_on:
       hunyuan-vllm:
@@ -79,7 +77,6 @@ services:
     build:
       context: ./kvcached
       dockerfile: Dockerfile.vllm-kvcached
-    container_name: nanonets-vllm
     runtime: nvidia
     depends_on:
       deepseek-vllm:
@@ -110,7 +107,6 @@ services:
       context: .
       dockerfile: Dockerfile
     image: ocr-backend:dev
-    container_name: ocr-backend-dev
     env_file:
       - .env
     environment:
