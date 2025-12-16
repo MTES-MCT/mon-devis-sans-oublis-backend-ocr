@@ -43,7 +43,10 @@ RUN pip install --no-cache-dir --upgrade pip \
       --index-url https://download.pytorch.org/whl/cu121
 
 # Install remaining packages
-RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt
+# IMPORTANT: don't use `--upgrade` here, otherwise pip may replace the CUDA torch
+# wheel (e.g. `2.x.y+cu121`) with a CPU wheel from PyPI (`2.x.y`) because the
+# local version suffix has lower precedence.
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # First copy only the files needed for downloading models
 # Only marker models need to be downloaded in the backend

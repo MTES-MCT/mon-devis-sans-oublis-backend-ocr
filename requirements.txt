@@ -6,10 +6,10 @@ gradio
 Pillow
 lxml
 
-# Marker/Surya are sensitive to recent Transformers changes.
-# Pin to a known-good release to avoid `PreTrainedModel` import issues.
-# Ref: https://github.com/datalab-to/marker/issues/699
-transformers==4.51.2
+# surya-ocr 0.17.0 requires transformers>=4.56.1
+# marker-pdf requires transformers>=4.45.2,<5.0.0
+# Pin to the minimum compatible version to avoid unexpected breakage.
+transformers==4.56.1
 
 accelerate
 hf-transfer
