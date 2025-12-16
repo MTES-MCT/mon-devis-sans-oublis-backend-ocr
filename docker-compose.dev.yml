@@ -48,7 +48,7 @@ services:
     container_name: deepseek-vllm
     runtime: nvidia
     depends_on:
-      hunyuan:
+      hunyuan-vllm:
         condition: service_healthy
     environment:
       HF_TOKEN: ${HF_TOKEN}
@@ -82,7 +82,7 @@ services:
     container_name: nanonets-vllm
     runtime: nvidia
     depends_on:
-      deepseek:
+      deepseek-vllm:
         condition: service_healthy
     environment:
       HF_TOKEN: ${HF_TOKEN}
