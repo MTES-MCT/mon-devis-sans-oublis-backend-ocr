@@ -10,94 +10,94 @@ volumes:
 
 services:
 
-  hunyuan-vllm:
-    build:
-      context: ./kvcached
-      dockerfile: Dockerfile.vllm-kvcached
-    runtime: nvidia
-    environment:
-      HF_TOKEN: ${HF_TOKEN}
-      NVIDIA_VISIBLE_DEVICES: "0"
-    volumes:
-      - huggingface_cache:/root/.cache/huggingface
-    command:
-      --model tencent/HunyuanOCR
-      --max-model-len 4096
-      --gpu-memory-utilization 0.2
-      --host 0.0.0.0
-      --port 8011
-    shm_size: "4gb"
-    networks: [ocr-network]
-    restart: unless-stopped
+  # hunyuan-vllm:
+  #   build:
+  #     context: ./kvcached
+  #     dockerfile: Dockerfile.vllm-kvcached
+  #   runtime: nvidia
+  #   environment:
+  #     HF_TOKEN: ${HF_TOKEN}
+  #     NVIDIA_VISIBLE_DEVICES: "0"
+  #   volumes:
+  #     - huggingface_cache:/root/.cache/huggingface
+  #   command:
+  #     --model tencent/HunyuanOCR
+  #     --max-model-len 4096
+  #     --gpu-memory-utilization 0.2
+  #     --host 0.0.0.0
+  #     --port 8011
+  #   shm_size: "4gb"
+  #   networks: [ocr-network]
+  #   restart: unless-stopped
 
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8011/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 120s
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8011/health"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 30
+  #     start_period: 120s
 
 
-  deepseek-vllm:
-    build:
-      context: ./kvcached
-      dockerfile: Dockerfile.vllm-kvcached
-    runtime: nvidia
-    depends_on:
-      hunyuan-vllm:
-        condition: service_healthy
-    environment:
-      HF_TOKEN: ${HF_TOKEN}
-      NVIDIA_VISIBLE_DEVICES: "0"
-    volumes:
-      - huggingface_cache:/root/.cache/huggingface
-    command:
-      --model deepseek-ai/DeepSeek-OCR
-      --logits_processors vllm.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor
-      --max-model-len 4096
-      --gpu-memory-utilization 0.2
-      --no-enable-prefix-caching
-      --host 0.0.0.0
-      --port 8012
-    shm_size: "4gb"
-    networks: [ocr-network]
-    restart: unless-stopped
+  # deepseek-vllm:
+  #   build:
+  #     context: ./kvcached
+  #     dockerfile: Dockerfile.vllm-kvcached
+  #   runtime: nvidia
+  #   depends_on:
+  #     hunyuan-vllm:
+  #       condition: service_healthy
+  #   environment:
+  #     HF_TOKEN: ${HF_TOKEN}
+  #     NVIDIA_VISIBLE_DEVICES: "0"
+  #   volumes:
+  #     - huggingface_cache:/root/.cache/huggingface
+  #   command:
+  #     --model deepseek-ai/DeepSeek-OCR
+  #     --logits_processors vllm.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor
+  #     --max-model-len 4096
+  #     --gpu-memory-utilization 0.2
+  #     --no-enable-prefix-caching
+  #     --host 0.0.0.0
+  #     --port 8012
+  #   shm_size: "4gb"
+  #   networks: [ocr-network]
+  #   restart: unless-stopped
 
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8012/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 120s
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8012/health"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 30
+  #     start_period: 120s
 
-  nanonets-vllm:
-    build:
-      context: ./kvcached
-      dockerfile: Dockerfile.vllm-kvcached
-    runtime: nvidia
-    depends_on:
-      deepseek-vllm:
-        condition: service_healthy
-    environment:
-      HF_TOKEN: ${HF_TOKEN}
-      NVIDIA_VISIBLE_DEVICES: "0"
-    volumes:
-      - huggingface_cache:/root/.cache/huggingface
-    command:
-      --model nanonets/Nanonets-OCR2-3B
-      --quantization bitsandbytes
-      --load-format bitsandbytes
-      --max-model-len 4096
-      --mm-processor-cache-gb 0
-      --gpu-memory-utilization 0.25
-      --enforce-eager
-      --host 0.0.0.0
-      --port 8013
-    shm_size: "4gb"
-    networks: [ocr-network]
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8013/health"]
+  # nanonets-vllm:
+  #   build:
+  #     context: ./kvcached
+  #     dockerfile: Dockerfile.vllm-kvcached
+  #   runtime: nvidia
+  #   depends_on:
+  #     deepseek-vllm:
+  #       condition: service_healthy
+  #   environment:
+  #     HF_TOKEN: ${HF_TOKEN}
+  #     NVIDIA_VISIBLE_DEVICES: "0"
+  #   volumes:
+  #     - huggingface_cache:/root/.cache/huggingface
+  #   command:
+  #     --model nanonets/Nanonets-OCR2-3B
+  #     --quantization bitsandbytes
+  #     --load-format bitsandbytes
+  #     --max-model-len 4096
+  #     --mm-processor-cache-gb 0
+  #     --gpu-memory-utilization 0.25
+  #     --enforce-eager
+  #     --host 0.0.0.0
+  #     --port 8013
+  #   shm_size: "4gb"
+  #   networks: [ocr-network]
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8013/health"]
 
   # 4. API (Starts Last)
   api:
@@ -126,13 +126,13 @@ services:
       - ./app:/app/app
       - huggingface_cache:/root/.cache/huggingface
       - ./temp:/tmp
-    depends_on:
-      nanonets-vllm:
-        condition: service_healthy
-      deepseek-vllm:
-        condition: service_healthy
-      hunyuan-vllm:
-        condition: service_healthy
+    # depends_on:
+    #   nanonets-vllm:
+    #     condition: service_healthy
+    #   deepseek-vllm:
+    #     condition: service_healthy
+    #   hunyuan-vllm:
+    #     condition: service_healthy
     networks:
       - ocr-network
     restart: unless-stopped
