@@ -10,67 +10,6 @@ volumes:
 
 services:
 
-  # hunyuan-vllm:
-  #   build:
-  #     context: ./kvcached
-  #     dockerfile: Dockerfile.vllm-kvcached
-  #   runtime: nvidia
-  #   environment:
-  #     HF_TOKEN: ${HF_TOKEN}
-  #     NVIDIA_VISIBLE_DEVICES: "0"
-  #   volumes:
-  #     - huggingface_cache:/root/.cache/huggingface
-  #   command:
-  #     --model tencent/HunyuanOCR
-  #     --max-model-len 4096
-  #     --gpu-memory-utilization 0.2
-  #     --host 0.0.0.0
-  #     --port 8011
-  #   shm_size: "4gb"
-  #   networks: [ocr-network]
-  #   restart: unless-stopped
-
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost:8011/health"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 30
-  #     start_period: 120s
-
-
-  # deepseek-vllm:
-  #   build:
-  #     context: ./kvcached
-  #     dockerfile: Dockerfile.vllm-kvcached
-  #   runtime: nvidia
-  #   depends_on:
-  #     hunyuan-vllm:
-  #       condition: service_healthy
-  #   environment:
-  #     HF_TOKEN: ${HF_TOKEN}
-  #     NVIDIA_VISIBLE_DEVICES: "0"
-  #   volumes:
-  #     - huggingface_cache:/root/.cache/huggingface
-  #   command:
-  #     --model deepseek-ai/DeepSeek-OCR
-  #     --logits_processors vllm.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor
-  #     --max-model-len 4096
-  #     --gpu-memory-utilization 0.2
-  #     --no-enable-prefix-caching
-  #     --host 0.0.0.0
-  #     --port 8012
-  #   shm_size: "4gb"
-  #   networks: [ocr-network]
-  #   restart: unless-stopped
-
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost:8012/health"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 30
-  #     start_period: 120s
-
-  # 4. API (Starts Last)
   api:
     build:
       context: .
@@ -82,7 +21,6 @@ services:
       - API_KEY=${API_KEY:-dev-api-key}
       - SENTRY_DNS=${SENTRY_DNS}
       - ENABLED_SERVICES=${ENABLED_SERVICES:-marker}
-      - HUNYUAN_ENDPOINT=http://hunyuan-vllm:8011/v1
       - DEEPSEEK_ENDPOINT=http://deepseek-vllm:8012/v1
       - MAX_CONCURRENT_OCR_REQUESTS=3
       - WORKERS=1
@@ -98,8 +36,6 @@ services:
       - ./temp:/tmp
     # depends_on:
     #   deepseek-vllm:
-    #     condition: service_healthy
-    #   hunyuan-vllm:
     #     condition: service_healthy
     networks:
       - ocr-network

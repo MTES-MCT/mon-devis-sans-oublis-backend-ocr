@@ -11,12 +11,11 @@ class Config:
     # Service Configuration
     ENABLED_SERVICES: List[str] = os.getenv(
         "ENABLED_SERVICES",
-        "marker,deepseek-ocr,hunyuan-ocr"  # Default: all services enabled
+        "marker,deepseek-ocr"  # Default: all services enabled
     ).split(",")
     
     # VLLM Endpoints
     DEEPSEEK_ENDPOINT: str = os.getenv("DEEPSEEK_ENDPOINT", "http://deepseek-vllm:8000/v1")
-    HUNYUAN_ENDPOINT: str = os.getenv("HUNYUAN_ENDPOINT", "http://hunyuan-vllm:8000/v1")
     
     # Concurrency Control
     MAX_CONCURRENT_OCR_REQUESTS: int = int(os.getenv("MAX_CONCURRENT_OCR_REQUESTS", "3"))
@@ -68,7 +67,6 @@ class Config:
         """Get VLLM endpoint for a service"""
         endpoints = {
             "deepseek-ocr": cls.DEEPSEEK_ENDPOINT,
-            "hunyuan-ocr": cls.HUNYUAN_ENDPOINT,
         }
         return endpoints.get(service_name)
 
