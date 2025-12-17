@@ -70,35 +70,6 @@ services:
   #     retries: 30
   #     start_period: 120s
 
-  # nanonets-vllm:
-  #   build:
-  #     context: ./kvcached
-  #     dockerfile: Dockerfile.vllm-kvcached
-  #   runtime: nvidia
-  #   depends_on:
-  #     deepseek-vllm:
-  #       condition: service_healthy
-  #   environment:
-  #     HF_TOKEN: ${HF_TOKEN}
-  #     NVIDIA_VISIBLE_DEVICES: "0"
-  #   volumes:
-  #     - huggingface_cache:/root/.cache/huggingface
-  #   command:
-  #     --model nanonets/Nanonets-OCR2-3B
-  #     --quantization bitsandbytes
-  #     --load-format bitsandbytes
-  #     --max-model-len 4096
-  #     --mm-processor-cache-gb 0
-  #     --gpu-memory-utilization 0.25
-  #     --enforce-eager
-  #     --host 0.0.0.0
-  #     --port 8013
-  #   shm_size: "4gb"
-  #   networks: [ocr-network]
-  #   restart: unless-stopped
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost:8013/health"]
-
   # 4. API (Starts Last)
   api:
     build:
@@ -113,7 +84,6 @@ services:
       - ENABLED_SERVICES=${ENABLED_SERVICES:-marker}
       - HUNYUAN_ENDPOINT=http://hunyuan-vllm:8011/v1
       - DEEPSEEK_ENDPOINT=http://deepseek-vllm:8012/v1
-      - NANONETS_ENDPOINT=http://nanonets-vllm:8013/v1
       - MAX_CONCURRENT_OCR_REQUESTS=3
       - WORKERS=1
       - LOG_LEVEL=debug
@@ -127,8 +97,6 @@ services:
       - huggingface_cache:/root/.cache/huggingface
       - ./temp:/tmp
     # depends_on:
-    #   nanonets-vllm:
-    #     condition: service_healthy
     #   deepseek-vllm:
     #     condition: service_healthy
     #   hunyuan-vllm:

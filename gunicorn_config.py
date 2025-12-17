@@ -63,7 +63,7 @@ def pre_exec(server):
 
 def on_starting(server):
     server.log.info("Starting Gunicorn server")
-    enabled_services = os.getenv('ENABLED_SERVICES', 'marker,nanonets,olmocr')
+    enabled_services = os.getenv('ENABLED_SERVICES', '')
     server.log.info(f"Enabled services: {enabled_services}")
     server.log.info(f"Configuration:")
     server.log.info(f"  Workers: {workers}")
