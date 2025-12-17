@@ -80,7 +80,7 @@ services:
       - .env
     environment:
       - API_KEY=${API_KEY:-dev-api-key}
-      - ENABLED_SERVICES=${ENABLED_SERVICES:-marker,deepseek-ocr,hunyuan-ocr}
+      - ENABLED_SERVICES=${ENABLED_SERVICES:-deepseek-ocr,hunyuan-ocr}
       - HUNYUAN_ENDPOINT=http://hunyuan-vllm:8011/v1
       - DEEPSEEK_ENDPOINT=http://deepseek-vllm:8012/v1
       - MAX_CONCURRENT_OCR_REQUESTS=3
