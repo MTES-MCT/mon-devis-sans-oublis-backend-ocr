@@ -24,6 +24,7 @@ services:
       --model tencent/HunyuanOCR
       --max-model-len 4096
       --gpu-memory-utilization 0.2
+      --enforce-eager
       --host 0.0.0.0
       --port 8011
     shm_size: "4gb"
@@ -56,6 +57,7 @@ services:
       --logits_processors vllm.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor
       --max-model-len 4096
       --gpu-memory-utilization 0.2
+      --enforce-eager
       --no-enable-prefix-caching
       --host 0.0.0.0
       --port 8012
