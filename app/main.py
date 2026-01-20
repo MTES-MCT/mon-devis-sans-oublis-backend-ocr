@@ -33,7 +33,12 @@ logger = logging.getLogger(__name__)
 api_key_header = APIKeyHeader(name=config.API_KEY_NAME, auto_error=False)
 
 async def get_api_key(api_key_header: str = Depends(api_key_header)):
-    if not config.API_KEY or not api_key_header or api_key_header != config.API_KEY:
+    # If no API keys are configured, authentication is disabled
+    if not config.API_KEYS:
+        return api_key_header
+    
+    # Validate the provided API key against the list of valid keys
+    if not api_key_header or not config.is_valid_api_key(api_key_header):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing API Key",
@@ -127,11 +132,13 @@ app.include_router(api_router)
 @app.on_event("startup")
 async def startup_event():
     """Log startup information"""
+    api_key_count = config.get_api_key_count()
     startup_info = {
         'service': 'OCR Backend Service',
         'enabled_services': config.get_enabled_services(),
         'workers': config.WORKERS,
-        'api_key_protection': 'Enabled' if config.API_KEY else 'Disabled'
+        'api_key_protection': 'Enabled' if api_key_count > 0 else 'Disabled',
+        'api_key_count': api_key_count
     }
     
     # Log to console for backward compatibility
@@ -139,6 +146,8 @@ async def startup_event():
     print(f"Enabled services: {startup_info['enabled_services']}")
     print(f"Workers configured: {startup_info['workers']}")
     print(f"API Key protection: {startup_info['api_key_protection']}")
+    if api_key_count > 0:
+        print(f"Configured API keys: {api_key_count}")
     
     # Log to Sentry
     sentry_logger.info(
@@ -147,6 +156,7 @@ async def startup_event():
             'ocr.enabled_services': startup_info['enabled_services'],
             'ocr.workers': startup_info['workers'],
             'ocr.api_key_protection': startup_info['api_key_protection'],
+            'ocr.api_key_count': startup_info['api_key_count'],
             'service.name': 'ocr-backend'
         }
     )
