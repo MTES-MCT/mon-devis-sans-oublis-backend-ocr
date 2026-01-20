@@ -1,11 +1,18 @@
 import os
-from typing import List, Optional
+from typing import List, Optional, Set
 
 class Config:
     """Configuration class for OCR service"""
     
     # API Configuration
-    API_KEY: Optional[str] = os.getenv("API_KEY")
+    # Support multiple API keys via comma-separated list
+    _API_KEYS_RAW: Optional[str] = os.getenv("API_KEY")
+    API_KEYS: Set[str] = set()
+    
+    if _API_KEYS_RAW:
+        # Parse comma-separated keys, strip whitespace, and filter empty strings
+        API_KEYS = {key.strip() for key in _API_KEYS_RAW.split(",") if key.strip()}
+    
     API_KEY_NAME: str = "x-api-key"
     
     # Service Configuration
@@ -43,5 +50,31 @@ class Config:
     def is_service_enabled(cls, service_name: str) -> bool:
         """Check if a specific service is enabled"""
         return service_name in cls.get_enabled_services()
+    
+    @classmethod
+    def is_valid_api_key(cls, api_key: str) -> bool:
+        """
+        Validate if the provided API key is in the list of valid keys.
+        
+        Args:
+            api_key: The API key to validate
+            
+        Returns:
+            True if the key is valid, False otherwise
+        """
+        if not cls.API_KEYS:
+            # If no API keys are configured, authentication is disabled
+            return True
+        return api_key in cls.API_KEYS
+    
+    @classmethod
+    def get_api_key_count(cls) -> int:
+        """
+        Get the number of configured API keys.
+        
+        Returns:
+            Number of valid API keys configured
+        """
+        return len(cls.API_KEYS)
 
 config = Config()
