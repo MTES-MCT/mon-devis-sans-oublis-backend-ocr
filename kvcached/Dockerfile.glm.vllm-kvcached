@@ -18,8 +18,11 @@ RUN pip install \
     torchvision==0.20.1+cu121 \
     --index-url https://download.pytorch.org/whl/cu121
 
-# vLLM
-RUN pip install vllm==0.12.0
+# vLLM nightly for GLM-OCR support
+RUN pip install -U vllm --pre --extra-index-url https://wheels.vllm.ai/nightly
+
+# transformers from source for GLM-OCR support
+RUN pip install git+https://github.com/huggingface/transformers.git
 
 # bitsandbytes (CUDA-aware)
 RUN pip install \
