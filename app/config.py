@@ -23,6 +23,7 @@ class Config:
     
     # VLLM Endpoints
     DEEPSEEK_ENDPOINT: str = os.getenv("DEEPSEEK_ENDPOINT", "http://deepseek-vllm:8000/v1")
+    GLM_OCR_ENDPOINT: str = os.getenv("GLM_OCR_ENDPOINT", "http://glm-vllm:8000/v1")
     
     # Concurrency Control
     MAX_CONCURRENT_OCR_REQUESTS: int = int(os.getenv("MAX_CONCURRENT_OCR_REQUESTS", "3"))

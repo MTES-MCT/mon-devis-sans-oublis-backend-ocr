@@ -10,6 +10,35 @@ volumes:
 
 services:
 
+  glm-vllm:
+    build:
+      context: ./kvcached
+      dockerfile: Dockerfile.glm.vllm-kvcached
+    runtime: nvidia
+    environment:
+      HF_TOKEN: ${HF_TOKEN}
+      NVIDIA_VISIBLE_DEVICES: "0"
+    volumes:
+      - huggingface_cache:/root/.cache/huggingface
+    command:
+      --model zai-org/GLM-OCR
+      --max-model-len 4096
+      --gpu-memory-utilization 0.25
+      --enforce-eager
+      --speculative-config.method mtp
+      --speculative-config.num_speculative_tokens 1
+      --host 0.0.0.0
+      --port 8013
+    shm_size: "8gb"
+    networks: [ocr-network]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8013/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 240s
+
   deepseek-vllm:
     build:
       context: ./kvcached
@@ -24,7 +53,7 @@ services:
       --model deepseek-ai/DeepSeek-OCR
       --logits_processors vllm.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor
       --max-model-len 4096
-      --gpu-memory-utilization 0.5
+      --gpu-memory-utilization 0.25
       --enforce-eager
       --no-enable-prefix-caching
       --host 0.0.0.0
@@ -50,8 +79,9 @@ services:
       - .env
     environment:
       - API_KEY=${API_KEY:-dev-api-key}
-      - ENABLED_SERVICES=${ENABLED_SERVICES:-deepseek-ocr}
+      - ENABLED_SERVICES=${ENABLED_SERVICES:-deepseek-ocr,glm-ocr}
       - DEEPSEEK_ENDPOINT=http://deepseek-vllm:8012/v1
+      - GLM_OCR_ENDPOINT=http://glm-vllm:8013/v1
       - MAX_CONCURRENT_OCR_REQUESTS=3
       - WORKERS=1
       - LOG_LEVEL=debug
@@ -66,6 +96,8 @@ services:
       - ./temp:/tmp
     depends_on:
       deepseek-vllm:
+        condition: service_healthy
+      glm-vllm:
         condition: service_healthy
     networks:
       - ocr-network
