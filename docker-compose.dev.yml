@@ -52,7 +52,7 @@ services:
     command:
       --model deepseek-ai/DeepSeek-OCR
       --logits_processors vllm.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor
-      --max-model-len 4096
+      --max-model-len 8192
       --gpu-memory-utilization 0.25
       --enforce-eager
       --no-enable-prefix-caching
