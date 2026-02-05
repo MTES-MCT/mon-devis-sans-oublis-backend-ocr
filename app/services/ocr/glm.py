@@ -15,6 +15,6 @@ class GLMOCRService(VLLMOCRService):
         self._endpoint = config.GLM_OCR_ENDPOINT
         
         # Simple prompt for OCR
-        self._system_prompt = "Convert the document to markdown."
+        self._system_prompt = "Text Recognition:"
         
         super().__init__()

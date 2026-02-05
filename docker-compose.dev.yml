@@ -23,11 +23,12 @@ services:
     command: >
       --model zai-org/GLM-OCR
       --max-model-len 8192
+      --max-num-batched-tokens 32768
       --gpu-memory-utilization 0.25
       --enforce-eager
       --speculative-config.method mtp
       --speculative-config.num_speculative_tokens 1
-      --limit-mm-per-prompt {"image":2}
+      --limit-mm-per-prompt.image 4
       --host 0.0.0.0
       --port 8013
     shm_size: "8gb"
