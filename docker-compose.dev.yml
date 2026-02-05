@@ -22,7 +22,7 @@ services:
       - huggingface_cache:/root/.cache/huggingface
     command:
       --model zai-org/GLM-OCR
-      --max-model-len 4096
+      --max-model-len 8192
       --gpu-memory-utilization 0.25
       --enforce-eager
       --speculative-config.method mtp
