@@ -40,9 +40,9 @@ RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt --extra-index-
 
 # First copy only the files needed for downloading models
 # Only marker models need to be downloaded in the backend
-# VLLM models are loaded in separate containers
+# SGLang models are loaded in separate containers
 COPY app/services/ocr/base.py /app/app/services/ocr/base.py
-COPY app/services/ocr/vllm_base.py /app/app/services/ocr/vllm_base.py
+COPY app/services/ocr/sglang_base.py /app/app/services/ocr/sglang_base.py
 COPY app/services/ocr/marker.py /app/app/services/ocr/marker.py
 COPY app/services/ocr/__init__.py /app/app/services/ocr/__init__.py
 
