@@ -30,9 +30,15 @@ services:
       --speculative-num-steps 3
       --speculative-eagle-topk 1
       --speculative-num-draft-tokens 4
-      --mem-fraction-static 0.4
     shm_size: "32gb"
     ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     networks: [ocr-network]
     restart: unless-stopped
     healthcheck:
@@ -58,9 +64,15 @@ services:
       --port 8012
       --host 0.0.0.0
       --served-model-name deepseek-ocr
-      --mem-fraction-static 0.4
     shm_size: "32gb"
     ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     networks: [ocr-network]
     restart: unless-stopped
     healthcheck:

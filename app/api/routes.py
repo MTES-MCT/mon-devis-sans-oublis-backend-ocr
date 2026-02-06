@@ -3,7 +3,7 @@ from app.services.ocr import get_service, OCR_SERVICES
 from app.models.ocr import OCRResponse
 from app.config import config
 from app.services.ocr.base import BaseOCRService
-from app.services.ocr.vllm_base import VLLMOCRService, VLLMProcessingError
+from app.services.ocr.sglang_base import SGLangOCRService, SGLangProcessingError
 from app.exceptions import (
     OCRException,
     InvalidFileFormatError,
@@ -390,26 +390,26 @@ async def ocr(
             logger.info(f"[File Conversion] Converted {file.filename} to {len(images)} images in {conversion_time:.2f}s")
 
             # Process based on service type
-            if isinstance(ocr_service, VLLMOCRService):
-                # VLLM services: async batch processing
+            if isinstance(ocr_service, SGLangOCRService):
+                # SGLang services: async batch processing
                 try:
                     results = await ocr_service.process_images_async(images)
-                except VLLMProcessingError as e:
+                except SGLangProcessingError as e:
                     sentry_logger.error(
-                        'VLLM OCR processing failed',
+                        'SGLang OCR processing failed',
                         attributes={
                             'ocr.service': service_name,
-                            'error.type': 'VLLMProcessingError',
+                            'error.type': 'SGLangProcessingError',
                             'error.message': str(e)
                         }
                     )
                     raise OCRProcessingError(
                         service_name=service_name,
-                        error_detail=f"VLLM processing failed: {str(e)}"
+                        error_detail=f"SGLang processing failed: {str(e)}"
                     )
                 except Exception as e:
                     sentry_logger.error(
-                        'Unexpected VLLM error',
+                        'Unexpected SGLang error',
                         attributes={
                             'ocr.service': service_name,
                             'error.type': type(e).__name__,
@@ -468,8 +468,8 @@ async def ocr(
 
         gc.collect()
 
-        # Clear GPU memory for non-VLLM services
-        if not isinstance(ocr_service, VLLMOCRService) and torch.cuda.is_available():
+        # Clear GPU memory for non-SGLang services
+        if not isinstance(ocr_service, SGLangOCRService) and torch.cuda.is_available():
             torch.cuda.empty_cache()
 
 @router.get("/services")
