@@ -19,3 +19,4 @@ img2pdf
 marker-pdf[full]==1.10.1
 surya-ocr
 sentry-sdk==2.49.0
+zipp>=3.19.1 # not directly required, pinned by Snyk to avoid a vulnerability
