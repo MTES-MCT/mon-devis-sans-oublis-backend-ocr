@@ -1,0 +1,15 @@
+# SGLang server for high-performance VLM inference
+# Uses the official sglang image with speculative decoding support
+
+FROM lmsysorg/sglang:dev
+
+# Install latest transformers for model support
+RUN pip install git+https://github.com/huggingface/transformers.git
+
+ENV HF_HOME=/root/.cache/huggingface
+
+# Expose default port
+EXPOSE 8000
+
+# Entrypoint will be overridden with model-specific commands in docker-compose
+ENTRYPOINT ["python", "-m", "sglang.launch_server"]

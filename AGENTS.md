@@ -12,16 +12,15 @@ FastAPI backend service providing OCR (Optical Character Recognition) capabiliti
 
 **Service Layer (`app/services/ocr/`):**
 - `base.py`: Abstract base class `BaseOCRService` that all OCR services inherit from
-- `vllm_base.py`: Base class `VLLMOCRService` for VLLM-based services with async processing
+- `sglang_base.py`: Base class `SGLangOCRService` for SGLang-based services with async processing and speculative decoding
 - Services are auto-discovered via the registration system in `__init__.py`
 - Two types of service implementations:
   1. **Direct Model Services**: `process_images(images: List[Image.Image]) -> List[str]`
-  2. **VLLM Services**: `process_images_async(images: List[Image.Image]) -> List[str]` (async)
-- Four OCR engines available:
-  - **marker** (`marker.py`): Direct model using marker-pdf library, converts images to PDF then processes
-  - **nanonets** (`nanonets.py`): VLLM-based using nanonets/Nanonets-OCR2-3B model
-  - **deepseek-ocr** (`deepseek.py`): VLLM-based using deepseek-ai/DeepSeek-OCR model
-  - **hunyuan-ocr** (`hunyuan.py`): VLLM-based using tencent/HunyuanOCR model
+  2. **SGLang Services**: `process_images_async(images: List[Image.Image]) -> List[str]` (async)
+- Three OCR engines available:
+  - **marker** (`marker.py`): Direct model using marker-pdf library, converts images to PDF then processes (PROD)
+  - **deepseek-ocr** (`deepseek.py`): SGLang-based using deepseek-ai/DeepSeek-OCR model (DEV)
+  - **glm-ocr** (`glm.py`): SGLang-based using zai-org/GLM-OCR with speculative decoding (DEV)
 
 **API Layer (`app/api/routes.py`):**
 - `POST /ocr/{service_name}`: Main OCR endpoint accepting file uploads
@@ -164,23 +163,23 @@ Required environment variables in `.env` file:
 
 ## Adding New OCR Services
 
-### Adding a VLLM-based Service
+### Adding an SGLang-based Service
 
-1. Add VLLM container to `docker-compose.dev.yml`
+1. Add SGLang container to `docker-compose.dev.yml` with appropriate speculative decoding settings
 2. Add endpoint configuration to `app/config.py`
 3. Create service file in `app/services/ocr/` (e.g., `newocr.py`)
-4. Inherit from `VLLMOCRService`
+4. Inherit from `SGLangOCRService`
 5. Set `_service_name`, `_model_name`, and `_system_prompt`
 6. The service will be auto-discovered and registered
 
 Example:
 ```python
-from .vllm_base import VLLMOCRService
+from .sglang_base import SGLangOCRService
 from app.config import config
 
-class NewOCRService(VLLMOCRService):
+class NewOCRService(SGLangOCRService):
     _service_name = "new-ocr"
-    _model_name = "org/model-name"
+    _model_name = "new-ocr"  # Matches --served-model-name in docker-compose
     
     def __init__(self):
         self._endpoint = config.NEW_OCR_ENDPOINT
@@ -217,51 +216,47 @@ class NewOCRService(BaseOCRService):
 
 - GPU support required for optimal performance (NVIDIA GPU with CUDA)
 - Hugging Face models cached in Docker volume to avoid re-downloading
-- **VLLM services**: Process images concurrently with semaphore control (max 3 concurrent by default)
+- **SGLang services**: Process images concurrently with semaphore control (max 5 concurrent by default)
 - **Marker service**: Converts all images to single PDF before processing
 - PDF pages converted to images at 150 DPI
 - APNG files supported with frame extraction
 - All endpoints require API key authentication except health check
-- VLLM containers download models on first startup (can take 10-30 minutes)
+- SGLang containers download models on first startup (can take 10-30 minutes)
 - Subsequent startups are fast as models are cached in shared volume
 
-## VLLM Architecture
+## SGLang Architecture
 
 ### Service Types
 
 The project now uses two types of OCR services:
 
-1. **Direct Model Services (Marker)**
+1. **Direct Model Services (Marker)** - PROD
    - Location: Inside FastAPI backend
    - Processing: Synchronous via threadpool
    - GPU: Dynamic allocation
 
-2. **VLLM Services (Nanonets, DeepSeek, Hunyuan)**
-   - Location: Separate Docker containers
+2. **SGLang Services (DeepSeek, GLM-OCR)** - DEV
+   - Location: Separate Docker containers using `lmsysorg/sglang:dev`
    - API: OpenAI-compatible HTTP
    - Processing: Async with concurrent batching
-   - GPU: Pre-allocated per container
+   - GPU: Pre-allocated per container via `--mem-fraction-static`
+   - GLM-OCR uses speculative decoding for high throughput
 
 ### Service Configuration
 
 Control which services are enabled via environment variable:
 
 ```bash
-# Enable all services
-ENABLED_SERVICES=marker,nanonets,deepseek-ocr,hunyuan-ocr
+# Enable all services (dev)
+ENABLED_SERVICES=deepseek-ocr,glm-ocr
 
-# Only marker
+# Only marker (prod)
 ENABLED_SERVICES=marker
-
-# Only VLLM services
-ENABLED_SERVICES=nanonets,deepseek-ocr,hunyuan-ocr
 ```
 
-### GPU Memory Allocation
+### GPU Memory Allocation (DEV)
 
-- **Marker (Backend)**: ~35% (dynamic, uses what's available)
-- **Nanonets VLLM**: 20% (--gpu-memory-utilization 0.2)
-- **DeepSeek VLLM**: 30% (--gpu-memory-utilization 0.3)
-- **Hunyuan VLLM**: 15% (--gpu-memory-utilization 0.15)
+- **GLM-OCR SGLang**: 40% (--mem-fraction-static 0.4)
+- **DeepSeek SGLang**: 40% (--mem-fraction-static 0.4)
 
-Total VLLM allocated: 65%, leaving 35% for Marker's dynamic needs.
+Note: Only run one SGLang service at a time, or adjust the memory fractions to fit both.

@@ -4,7 +4,6 @@ import asyncio
 import logging
 import time
 from typing import List, Optional
-from abc import abstractmethod
 from PIL import Image
 from openai import AsyncOpenAI, APIError, APITimeoutError
 from .base import BaseOCRService
@@ -13,43 +12,43 @@ from app.config import config
 logger = logging.getLogger(__name__)
 
 
-class VLLMProcessingError(Exception):
-    """Exception raised when VLLM processing fails"""
+class SGLangProcessingError(Exception):
+    """Exception raised when SGLang processing fails"""
     pass
 
 
-class VLLMOCRService(BaseOCRService):
+class SGLangOCRService(BaseOCRService):
     """
-    Base class for VLLM-based OCR services.
+    Base class for SGLang-based OCR services.
     
-    This class provides common functionality for services that use VLLM
+    This class provides common functionality for services that use SGLang
     with OpenAI-compatible API for vision-based OCR.
+    
+    SGLang provides high-throughput inference with speculative decoding support.
     
     Subclasses should set:
     - _service_name: Unique identifier for the service
-    - _model_name: VLLM model name
-    - _endpoint: VLLM API endpoint URL
-    - _system_prompt: Text prompt for OCR (default: "Extract all text from this image.")
-    - _extra_body: Optional dict with VLLM-specific parameters (default: None)
+    - _model_name: Model name as served by SGLang (--served-model-name)
+    - _endpoint: SGLang API endpoint URL
+    - _system_prompt: Text prompt for OCR
     """
     
-    _service_name = "vllm_base"
+    _service_name = "sglang_base"
     _endpoint: Optional[str] = None
     _system_prompt: str = "Extract all text from this image."
     _model_name: str = "default"
-    _extra_body: Optional[dict] = None  # Subclasses can override with model-specific config
     
     def __init__(self):
-        """Initialize VLLM service with OpenAI client"""
+        """Initialize SGLang service with OpenAI client"""
         super().__init__()
         
         if not self._endpoint:
             raise ValueError(f"Endpoint not configured for {self._service_name}")
         
-        # Initialize OpenAI client pointing to VLLM server
+        # Initialize OpenAI client pointing to SGLang server
         self.client = AsyncOpenAI(
             base_url=self._endpoint,
-            api_key="EMPTY",  # VLLM doesn't require API key
+            api_key="EMPTY",  # SGLang doesn't require API key
             timeout=config.VLLM_REQUEST_TIMEOUT,
         )
         
@@ -67,12 +66,6 @@ class VLLMOCRService(BaseOCRService):
         """
         Encode PIL Image to base64 string for API transmission.
         Uses JPEG encoding for faster processing and smaller file sizes.
-        
-        Args:
-            image: PIL Image object
-            
-        Returns:
-            Base64 encoded image string
         """
         buffered = io.BytesIO()
         
@@ -80,37 +73,22 @@ class VLLMOCRService(BaseOCRService):
         if image.mode != 'RGB':
             image = image.convert('RGB')
         
-        # Get encoding settings from config
         encode_format = config.IMAGE_ENCODE_FORMAT
         
-        # Save with appropriate format and quality
         if encode_format == "JPEG":
             image.save(buffered, format="JPEG", quality=config.IMAGE_ENCODE_QUALITY, optimize=True)
             mime_type = "image/jpeg"
         else:
-            # Fallback to PNG if configured
             image.save(buffered, format="PNG", optimize=True)
             mime_type = "image/png"
         
         buffered.seek(0)
-        
-        # Encode to base64
         img_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
         return f"data:{mime_type};base64,{img_str}"
     
     async def process_single_image(self, image: Image.Image, retry_count: int = 0) -> str:
         """
-        Process a single image asynchronously using VLLM with retry logic.
-        
-        Args:
-            image: PIL Image object
-            retry_count: Current retry attempt (internal use)
-            
-        Returns:
-            Extracted text from the image
-            
-        Raises:
-            VLLMProcessingError: If processing fails after all retries
+        Process a single image asynchronously using SGLang with retry logic.
         """
         async with self.semaphore:
             try:
@@ -122,7 +100,6 @@ class VLLMOCRService(BaseOCRService):
                 base64_image = self.encode_image_to_base64(image)
                 encode_time = time.time() - encode_start
                 logger.debug(f"[{self._service_name}] Image encoding took {encode_time:.3f}s")
-                logger.debug(f"[{self._service_name}] Image encoded to base64 (size: {len(base64_image)} chars)")
                 
                 # Create message with vision content
                 messages = [
@@ -143,57 +120,32 @@ class VLLMOCRService(BaseOCRService):
                     }
                 ]
                 
-                logger.info(f"[{self._service_name}] Sending request to VLLM endpoint: {self._endpoint}")
-                logger.debug(f"[{self._service_name}] System prompt: {self._system_prompt}")
-                logger.debug(f"[{self._service_name}] Image base64 prefix: {base64_image[:100]}...")
-                logger.debug(f"[{self._service_name}] Request: model={self._model_name}, max_tokens={config.VLLM_MAX_TOKENS}, temperature=0")
-                logger.debug(f"[{self._service_name}] Message structure: {messages[0]['content'][0]['type']}, text: {messages[0]['content'][1]['text']}")
+                logger.info(f"[{self._service_name}] Sending request to SGLang endpoint: {self._endpoint}")
                 
-                # Call VLLM via OpenAI API
-                # Use max_tokens=2096 to match successful test
+                # Call SGLang via OpenAI API
                 request_params = {
                     "model": self._model_name,
                     "messages": messages,
-                    "max_tokens": 2096,
+                    "max_tokens": config.VLLM_MAX_TOKENS,
                     "temperature": 0.0,  # Deterministic output for OCR
                 }
                 
-                # Add extra_body if provided by subclass
-                if self._extra_body:
-                    request_params["extra_body"] = self._extra_body
-                    logger.debug(f"[{self._service_name}] Using extra_body: {self._extra_body}")
-                
-                # Time the VLLM API call
-                vllm_start = time.time()
+                # Time the SGLang API call
+                api_start = time.time()
                 response = await self.client.chat.completions.create(**request_params)
-                vllm_time = time.time() - vllm_start
-                logger.info(f"[{self._service_name}] VLLM API call took {vllm_time:.2f}s")
-                
-                # Log full response for debugging
-                logger.debug(f"[{self._service_name}] Full response object: {response}")
-                logger.debug(f"[{self._service_name}] Response model: {response.model}")
-                logger.debug(f"[{self._service_name}] Choices count: {len(response.choices)}")
-                
-                if response.choices and len(response.choices) > 0:
-                    choice = response.choices[0]
-                    logger.debug(f"[{self._service_name}] Finish reason: {choice.finish_reason}")
-                    logger.debug(f"[{self._service_name}] Message: {choice.message}")
-                    logger.debug(f"[{self._service_name}] Content type: {type(choice.message.content)}")
-                    logger.debug(f"[{self._service_name}] Content value: {repr(choice.message.content)}")
+                api_time = time.time() - api_start
+                logger.info(f"[{self._service_name}] SGLang API call took {api_time:.2f}s")
                 
                 # Extract text from response
                 text = response.choices[0].message.content
                 
                 if not text:
-                    logger.warning(f"[{self._service_name}] Received empty response from VLLM")
-                    logger.warning(f"[{self._service_name}] Full response: {response.model_dump_json()}")
-                    # If we get an empty response, raise an error to trigger retry
-                    raise VLLMProcessingError("Empty response from VLLM")
+                    logger.warning(f"[{self._service_name}] Received empty response from SGLang")
+                    raise SGLangProcessingError("Empty response from SGLang")
                 
                 total_time = time.time() - image_start
-                logger.info(f"[{self._service_name}] Successfully processed image in {total_time:.2f}s (VLLM: {vllm_time:.2f}s, encoding: {encode_time:.3f}s)")
+                logger.info(f"[{self._service_name}] Successfully processed image in {total_time:.2f}s")
                 logger.info(f"[{self._service_name}] Response length: {len(text)} chars")
-                logger.debug(f"[{self._service_name}] Response text preview: {text[:200]}...")
                 
                 return text
                 
@@ -201,53 +153,40 @@ class VLLMOCRService(BaseOCRService):
                 logger.error(f"[{self._service_name}] Timeout error (attempt {retry_count + 1}/{self.max_retries}): {str(e)}")
                 
                 if retry_count < self.max_retries - 1:
-                    delay = self.retry_delay * (2 ** retry_count)  # Exponential backoff
+                    delay = self.retry_delay * (2 ** retry_count)
                     logger.info(f"[{self._service_name}] Retrying after {delay}s...")
                     await asyncio.sleep(delay)
                     return await self.process_single_image(image, retry_count + 1)
                 
-                raise VLLMProcessingError(f"Timeout after {self.max_retries} attempts: {str(e)}")
+                raise SGLangProcessingError(f"Timeout after {self.max_retries} attempts: {str(e)}")
                 
             except APIError as e:
                 logger.error(f"[{self._service_name}] API error (attempt {retry_count + 1}/{self.max_retries}): {str(e)}")
                 
-                # Only retry on 5xx errors (server errors)
                 if hasattr(e, 'status_code') and 500 <= e.status_code < 600 and retry_count < self.max_retries - 1:
                     delay = self.retry_delay * (2 ** retry_count)
                     logger.info(f"[{self._service_name}] Retrying after {delay}s...")
                     await asyncio.sleep(delay)
                     return await self.process_single_image(image, retry_count + 1)
                 
-                raise VLLMProcessingError(f"API error: {str(e)}")
+                raise SGLangProcessingError(f"API error: {str(e)}")
                 
-            except VLLMProcessingError as e:
-                # Already a VLLMProcessingError, check if we should retry
+            except SGLangProcessingError as e:
                 if retry_count < self.max_retries - 1:
                     delay = self.retry_delay * (2 ** retry_count)
                     logger.info(f"[{self._service_name}] Retrying after {delay}s...")
                     await asyncio.sleep(delay)
                     return await self.process_single_image(image, retry_count + 1)
-                
-                # Re-raise the error after all retries exhausted
                 raise
                 
             except Exception as e:
-                logger.error(f"[{self._service_name}] Unexpected error processing image: {type(e).__name__}: {str(e)}")
+                logger.error(f"[{self._service_name}] Unexpected error: {type(e).__name__}: {str(e)}")
                 logger.exception(f"[{self._service_name}] Full traceback:")
-                raise VLLMProcessingError(f"Unexpected error: {type(e).__name__}: {str(e)}")
+                raise SGLangProcessingError(f"Unexpected error: {type(e).__name__}: {str(e)}")
     
     async def process_images_async(self, images: List[Image.Image]) -> List[str]:
         """
-        Process multiple images concurrently using VLLM.
-        
-        Args:
-            images: List of PIL Image objects
-            
-        Returns:
-            List of extracted text strings, one per image
-            
-        Raises:
-            VLLMProcessingError: If any image fails to process after retries
+        Process multiple images concurrently using SGLang.
         """
         if not images:
             return []
@@ -258,7 +197,7 @@ class VLLMOCRService(BaseOCRService):
         
         # Process all images concurrently with semaphore control
         tasks = [self.process_single_image(img) for img in images]
-        results = await asyncio.gather(*tasks, return_exceptions=False)  # Don't catch exceptions
+        results = await asyncio.gather(*tasks, return_exceptions=False)
         
         batch_time = time.time() - batch_start
         avg_time = batch_time / num_images if num_images > 0 else 0
@@ -269,9 +208,6 @@ class VLLMOCRService(BaseOCRService):
     def process_images(self, images: List[Image.Image]) -> List[str]:
         """
         Synchronous wrapper for backward compatibility.
-        
-        This should not be called directly - use process_images_async instead.
-        Only implemented to satisfy base class interface.
         """
         raise NotImplementedError(
             f"{self._service_name} is async-only. Use process_images_async() instead."
